@@ -5,7 +5,7 @@ use cortexm4;
 use kernel::common::deferred_call;
 use kernel::Chip;
 
-// uncomment this if you are using deffered tasks
+// uncomment this if you are using deferred tasks
 // use crate::deferred_call_tasks::Task;
 use crate::exti;
 use crate::nvic;
