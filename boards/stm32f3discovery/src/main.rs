@@ -10,12 +10,14 @@
 use capsules::virtual_alarm::VirtualMuxAlarm;
 use components::gpio::GpioComponent;
 use kernel::capabilities;
+use capsules::virtual_spi::{MuxSpiMaster, VirtualSpiMasterDevice};
 use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferredCallClientState};
 use kernel::component::Component;
 use kernel::hil::gpio::Configure;
 use kernel::hil::gpio::Output;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
+use stm32f3xx::gpio::{AlternateFunction, Mode, PinId, PortId, PORT};
 
 /// Support routines for debugging I/O.
 pub mod io;
@@ -87,7 +89,6 @@ impl Platform for STM32F3Discovery {
 /// Helper function called during bring-up that configures multiplexed I/O.
 unsafe fn set_pin_primary_functions() {
     use stm32f3xx::exti::{LineId, EXTI};
-    use stm32f3xx::gpio::{AlternateFunction, Mode, PinId, PortId, PORT};
     use stm32f3xx::syscfg::SYSCFG;
 
     SYSCFG.enable_clock();
@@ -118,7 +119,7 @@ unsafe fn set_pin_primary_functions() {
         // AF7 is USART1_TX
         pin.set_alternate_function(AlternateFunction::AF7);
     });
-    PinId::PA05.get_pin().as_ref().map(|pin| {
+    PinId::PC05.get_pin().as_ref().map(|pin| {
         pin.set_mode(Mode::AlternateFunctionMode);
         // AF7 is USART1_RX
         pin.set_alternate_function(AlternateFunction::AF7);
@@ -293,9 +294,9 @@ pub unsafe fn reset_handler() {
         stm32f3xx::gpio::PinId::PA01.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PA03.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PF04.get_pin().as_ref().unwrap(),
-        stm32f3xx::gpio::PinId::PA05.get_pin().as_ref().unwrap(),
-        stm32f3xx::gpio::PinId::PA07.get_pin().as_ref().unwrap(),
-        stm32f3xx::gpio::PinId::PC05.get_pin().as_ref().unwrap(),
+        // stm32f3xx::gpio::PinId::PA05.get_pin().as_ref().unwrap(),
+        // stm32f3xx::gpio::PinId::PA07.get_pin().as_ref().unwrap(),
+        // stm32f3xx::gpio::PinId::PC05.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PB01.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PE07.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PE09.get_pin().as_ref().unwrap(),
@@ -316,8 +317,8 @@ pub unsafe fn reset_handler() {
         // stm32f3xx::gpio::PinId::PA00.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PA02.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PA04.get_pin().as_ref().unwrap(),
-        stm32f3xx::gpio::PinId::PA06.get_pin().as_ref().unwrap(),
-        stm32f3xx::gpio::PinId::PC04.get_pin().as_ref().unwrap(),
+        // stm32f3xx::gpio::PinId::PA06.get_pin().as_ref().unwrap(),
+        // stm32f3xx::gpio::PinId::PC04.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PB00.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PB02.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PE08.get_pin().as_ref().unwrap(),
@@ -358,7 +359,7 @@ pub unsafe fn reset_handler() {
         stm32f3xx::gpio::PinId::PC15.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PC13.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PE05.get_pin().as_ref().unwrap(),
-        stm32f3xx::gpio::PinId::PE03.get_pin().as_ref().unwrap(),
+        // stm32f3xx::gpio::PinId::PE03.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PB09.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PB07.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PB05.get_pin().as_ref().unwrap(),
@@ -373,6 +374,60 @@ pub unsafe fn reset_handler() {
         stm32f3xx::gpio::PinId::PA09.get_pin().as_ref().unwrap(),
         stm32f3xx::gpio::PinId::PC09.get_pin().as_ref().unwrap()
     ));
+
+    PinId::PA06.get_pin().as_ref().map(|pin| {
+        pin.set_mode(Mode::AlternateFunctionMode);
+        pin.set_floating_state (kernel::hil::gpio::FloatingState::PullNone);
+        // AF5 is SPI1/SPI2
+        pin.set_alternate_function(AlternateFunction::AF5);
+    });
+    PinId::PA07.get_pin().as_ref().map(|pin| {
+        pin.make_output ();
+        pin.set_floating_state (kernel::hil::gpio::FloatingState::PullNone);
+        pin.set_mode(Mode::AlternateFunctionMode);
+        // AF5 is SPI1/SPI2
+        pin.set_alternate_function(AlternateFunction::AF5);
+    });
+    PinId::PA05.get_pin().as_ref().map(|pin| {
+        pin.make_output();
+        pin.set_floating_state (kernel::hil::gpio::FloatingState::PullNone);
+        pin.set_mode(Mode::AlternateFunctionMode);
+        // AF5 is SPI1/SPI2
+        pin.set_alternate_function(AlternateFunction::AF5);
+    });
+    PinId::PE03.get_pin().as_ref().map(|pin| {
+        pin.make_output ();
+        pin.set_floating_state (kernel::hil::gpio::FloatingState::PullNone);
+        pin.set ();
+    });
+
+    stm32f3xx::spi::SPI1.enable_clock ();
+
+    let mux_spi = components::spi::SpiMuxComponent::new(&stm32f3xx::spi::SPI1)
+        .finalize(components::spi_mux_component_helper!(stm32f3xx::spi::Spi));
+
+    let l3gd20_spi = components::spi::SpiComponent::new(mux_spi, stm32f3xx::gpio::PinId::PE03).finalize(components::spi_component_helper!(stm32f3xx::spi::Spi));
+
+    let l3gd20_virtual_alarm = static_init!(
+        VirtualMuxAlarm<'static, stm32f3xx::tim2::Tim2>,
+        VirtualMuxAlarm::new(mux_alarm));
+
+    static mut TXBUFFER: [u8; capsules::l3gd20::L3GD20_TX_SIZE] = [0; capsules::l3gd20::L3GD20_TX_SIZE];
+    static mut RXBUFFER: [u8; capsules::l3gd20::L3GD20_RX_SIZE] = [0; capsules::l3gd20::L3GD20_RX_SIZE];
+    
+    let l3gd20 = static_init!(
+        capsules::l3gd20::L3GD20<'static, VirtualMuxAlarm<'static, stm32f3xx::tim2::Tim2>>,
+        capsules::l3gd20::L3GD20::new(l3gd20_spi,
+            l3gd20_virtual_alarm,
+            &mut TXBUFFER,
+            &mut RXBUFFER));
+
+    l3gd20_spi.set_client (l3gd20);
+    l3gd20.configure ();
+
+    debug! ("is present {}", l3gd20.is_present ());
+    // l3gd20_spi.set_client(l3gd20);
+    // l3gd20_virtual_alarm.set_client(l3gd20);
 
     let stm32f3discovery = STM32F3Discovery {
         console: console,

@@ -1,13 +1,14 @@
 use core::cell::Cell;
 use core::cmp;
 
-use kernel::common::cells::OptionalCell;
+use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::hil::gpio::Output;
 use kernel::hil::spi::{self, ClockPhase, ClockPolarity, SpiMaster, SpiMasterClient};
 use kernel::{ClockInterface, ReturnCode};
+use kernel::debug;
 
 use crate::gpio::PinId;
 use crate::rcc;
@@ -45,8 +46,8 @@ register_bitfields![u32,
         CRCEN OFFSET(13) NUMBITS(1) [],
         /// CRC transfer next
         CRCNEXT OFFSET(12) NUMBITS(1) [],
-        /// Data frame format
-        DFF OFFSET(11) NUMBITS(1) [],
+        /// CRC length
+        CRCL OFFSET(11) NUMBITS(1) [],
         /// Receive only
         RXONLY OFFSET(10) NUMBITS(1) [],
         /// Software slave management
@@ -177,6 +178,15 @@ pub struct Spi<'a> {
     master_client: OptionalCell<&'a dyn hil::spi::SpiMasterClient>,
 
     active_slave: OptionalCell<PinId>,
+
+    tx_buffer: TakeCell<'static, [u8]>,
+    tx_position: Cell<usize>,
+
+    rx_buffer: TakeCell<'static, [u8]>,
+    rx_position: Cell<usize>,
+    len: Cell<usize>,
+
+    transfers: Cell<usize>
 }
 
 pub static mut SPI1: Spi = Spi::new(
@@ -192,6 +202,16 @@ impl Spi<'a> {
 
             master_client: OptionalCell::empty(),
             active_slave: OptionalCell::empty(),
+
+            tx_buffer: TakeCell::empty (),
+            tx_position: Cell::new (0),
+
+            rx_buffer: TakeCell::empty (),
+            rx_position: Cell::new (0),
+            
+            len: Cell::new (0),
+            
+            transfers: Cell::new (0)
         }
     }
 
@@ -200,6 +220,7 @@ impl Spi<'a> {
     }
 
     pub fn enable_clock(&self) {
+        debug! ("enable spi");
         self.clock.enable();
     }
 
@@ -210,6 +231,52 @@ impl Spi<'a> {
     pub fn handle_interrupt(&self) {
         // Used only during debugging. Since we use DMA, we do not enable SPI
         // interrupts during normal operations
+        // self.registers.sr.modify(SR::RXNE::CLEAR);
+        // self.registers.sr.modify(SR::TXE::CLEAR);
+
+        debug! ("stm32f3 spi interrupt");
+
+        if self.registers.sr.is_set(SR::RXNE) {
+            if self.rx_buffer.is_some() && self.rx_position.get() < self.len.get() {
+                self.rx_buffer.map (|buf| {
+                    buf[self.rx_position.get()] = self.registers.dr.read(DR::DR) as u8;
+                    self.rx_position.set (self.rx_position.get () + 1);
+                });
+            }
+            else
+            {
+                // drop data if buffer is full
+                self.registers.cr2.modify(CR2::RXNEIE::CLEAR);
+                self.transfers.set (self.transfers.get() & 0b101);
+            }
+            
+            // debug! ("stm32f3 spi read byte {}", byte);
+        }
+        
+        if self.registers.sr.is_set(SR::TXE) {
+            if self.tx_buffer.is_some() && self.tx_position.get() < self.len.get() {
+                self.tx_buffer.map (|buf| {
+                    debug! ("stm32 spi transmitted {}", buf[self.tx_position.get()] as u32);
+                    self.registers.dr.write(DR::DR.val (buf[self.tx_position.get()] as u32));
+                    self.tx_position.set (self.tx_position.get () + 1);
+                    
+                });
+            }
+            else
+            {
+                self.registers.cr2.modify(CR2::TXEIE::CLEAR);
+                self.transfers.set (self.transfers.get() & 0b110);
+            }
+        }
+
+        debug! ("transfers {}", self.transfers.get ());
+
+        if self.transfers.get () == 0b100 {
+            debug! ("read write");
+            self.master_client.map (|client| 
+                self.tx_buffer.take().map (|buf| client.read_write_done (buf, self.rx_buffer.take(), self.len.get ())));
+            self.transfers.set (0);
+        }
     }
 
     fn set_active_slave(&self, slave_pin: PinId) {
@@ -281,19 +348,55 @@ impl Spi<'a> {
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
     ) -> ReturnCode {
+
+        debug! ("stm32f3 spi read write");
+
         if write_buffer.is_none() && read_buffer.is_none() {
             return ReturnCode::EINVAL;
         }
 
-        // self.hold_low();
+        if self.transfers.get () == 0 {
+            self.hold_low();
 
-        // let mut count: usize = len;
-        // write_buffer
-        //     .as_ref()
-        //     .map(|buf| count = cmp::min(count, buf.len()));
-        // read_buffer
-        //     .as_ref()
-        //     .map(|buf| count = cmp::min(count, buf.len()));
+            self.transfers.set (self.transfers.get() | 0b100);
+
+            let mut count: usize = len;
+            write_buffer
+                .as_ref()
+                .map(|buf| count = cmp::min(count, buf.len()));
+            read_buffer
+                .as_ref()
+                .map(|buf| count = cmp::min(count, buf.len()));
+
+            if write_buffer.is_some () {
+                self.transfers.set (self.transfers.get() | 0b010);
+            }
+
+            if read_buffer.is_some () {
+                self.transfers.set (self.transfers.get() | 0b001);
+            }
+
+            read_buffer.map (|buf| {
+                self.rx_buffer.replace (buf);
+                self.len.set (count);
+                self.rx_position.set (0);
+                self.registers.cr2.modify(CR2::RXNEIE::SET);
+            });
+
+            write_buffer.map (|buf| {
+                self.tx_buffer.replace (buf);
+                self.len.set (count);
+                self.tx_position.set (0);
+                self.registers.cr2.modify(CR2::TXEIE::SET);
+            });
+
+            ReturnCode::SUCCESS
+        }
+        else
+        {
+            ReturnCode::EBUSY
+        }
+
 
         // self.dma_len.set(count);
 
@@ -324,8 +427,6 @@ impl Spi<'a> {
         //         index += 1;
         //     }
         // });
-
-        ReturnCode::SUCCESS
     }
 }
 
@@ -340,6 +441,15 @@ impl spi::SpiMaster for Spi<'a> {
         // enable error interrupt (used only for debugging)
         // self.registers.cr2.modify(CR2::ERRIE::SET);
 
+        debug! ("stm32f3 spi init");
+
+        self.registers.cr2.modify(
+            // Set 8 bit mode
+            CR2::DS.val (0b0111)+
+            // Set FIFO level at 1/4
+            CR2::FRXTH::SET
+        );
+
         self.registers.cr1.modify(
             // 2 line unidirectional mode
             CR1::BIDIMODE::CLEAR +
@@ -348,8 +458,6 @@ impl spi::SpiMaster for Spi<'a> {
             // Software slave management
             CR1::SSM::SET +
             CR1::SSI::SET +
-            // 8 bit data frame format
-            CR1::DFF::CLEAR +
             // Enable
             CR1::SPE::SET,
         );
@@ -360,11 +468,12 @@ impl spi::SpiMaster for Spi<'a> {
     }
 
     fn write_byte(&self, out_byte: u8) {
+        debug! ("spi write byte {}", out_byte);
         // loop till TXE (Transmit Buffer Empty) becomes 1
         while !self.registers.sr.is_set(SR::TXE) {}
 
         self.registers.dr.modify(DR::DR.val(out_byte as u32));
-    }
+    } 
 
     fn read_byte(&self) -> u8 {
         self.read_write_byte(0)
@@ -396,6 +505,7 @@ impl spi::SpiMaster for Spi<'a> {
     /// We *only* support 1Mhz. If `rate` is set to any value other than
     /// `1_000_000`, then this function panics
     fn set_rate(&self, rate: u32) -> u32 {
+        debug! ("stm32f3 spi set rate");
         if rate != 1_000_000 {
             panic!("rate must be 1_000_000");
         }

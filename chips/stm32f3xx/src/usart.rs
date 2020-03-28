@@ -6,6 +6,7 @@ use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ClockInterface;
 use kernel::ReturnCode;
+use cortex_m_semihosting::hprint;
 
 use crate::rcc;
 
@@ -339,8 +340,9 @@ impl Usart<'a> {
     // for use by panic in io.rs
     pub fn send_byte(&self, byte: u8) {
         // loop till TXE (Transmit data register empty) becomes 1
-        while !self.registers.isr.is_set(ISR::TXE) {}
-        self.registers.tdr.set(byte.into());
+        // while !self.registers.isr.is_set(ISR::TXE) {}
+        // self.registers.tdr.set(byte.into());
+        hprint! ("{}", char::from(byte)).unwrap();
     }
 
     fn enable_transmit_complete_interrupt(&self) {

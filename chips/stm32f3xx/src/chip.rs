@@ -11,6 +11,7 @@ use crate::exti;
 use crate::nvic;
 use crate::tim2;
 use crate::usart;
+use crate::spi;
 
 pub struct Stm32f3xx {
     mpu: cortexm4::mpu::MPU,
@@ -48,6 +49,8 @@ impl Chip for Stm32f3xx {
 
                         nvic::TIM2 => tim2::TIM2.handle_interrupt(),
 
+                        nvic::SPI1 => spi::SPI1.handle_interrupt(),
+
                         nvic::EXTI0 => exti::EXTI.handle_interrupt(),
                         nvic::EXTI1 => exti::EXTI.handle_interrupt(),
                         nvic::EXTI2 => exti::EXTI.handle_interrupt(),
@@ -57,7 +60,7 @@ impl Chip for Stm32f3xx {
                         nvic::EXTI15_10 => exti::EXTI.handle_interrupt(),
 
                         _ => {
-                            panic!("unhandled interrupt {}", interrupt);
+                            // panic!("unhandled interrupt {}", interrupt);
                         }
                     }
 

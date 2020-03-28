@@ -5,6 +5,7 @@ use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::{List, ListLink, ListNode};
 use kernel::hil;
 use kernel::ReturnCode;
+use kernel::debug;
 
 /// The Mux struct manages multiple Spi clients. Each client may have
 /// at most one outstanding Spi request.
@@ -38,12 +39,18 @@ impl<Spi: hil::spi::SpiMaster> MuxSpiMaster<'a, Spi> {
     }
 
     fn do_next_op(&self) {
+        debug! ("spi do next op");
         if self.inflight.is_none() {
+            debug! ("spi in flight is none");
             let mnode = self
                 .devices
                 .iter()
-                .find(|node| node.operation.get() != Op::Idle);
+                .find(|node| {
+                    debug! ("spi devices");
+                    node.operation.get() != Op::Idle
+                });
             mnode.map(|node| {
+                debug! ("spi map");
                 self.spi.specify_chip_select(node.chip_select.get());
                 let op = node.operation.get();
                 // Need to set idle here in case callback changes state
@@ -118,6 +125,7 @@ impl<Spi: hil::spi::SpiMaster> VirtualSpiMasterDevice<'a, Spi> {
     }
 
     pub fn set_client(&'a self, client: &'a dyn hil::spi::SpiMasterClient) {
+        debug! ("spi virtual master set client");
         self.mux.devices.push_head(self);
         self.client.set(client);
     }
@@ -156,6 +164,7 @@ impl<Spi: hil::spi::SpiMaster> hil::spi::SpiMasterDevice for VirtualSpiMasterDev
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
     ) -> ReturnCode {
+        debug! ("spi master device read write bytes");
         self.txbuffer.replace(write_buffer);
         self.rxbuffer.put(read_buffer);
         self.operation.set(Op::ReadWriteBytes(len));
