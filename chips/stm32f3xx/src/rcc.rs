@@ -586,6 +586,20 @@ impl Rcc {
     fn disable_spi1_clock(&self) {
         self.registers.apb2enr.modify(APB2ENR::SPI1EN::CLEAR)
     }
+
+    // I2C1 clock
+
+    fn is_enabled_i2c1_clock(&self) -> bool {
+        self.registers.apb1enr.is_set(APB1ENR::I2C1EN)
+    }
+
+    fn enable_i2c1_clock(&self) {
+        self.registers.apb1enr.modify(APB1ENR::I2C1EN::SET)
+    }
+
+    fn disable_i2c1_clock(&self) {
+        self.registers.apb1enr.modify(APB1ENR::I2C1EN::CLEAR)
+    }
 }
 
 /// Clock sources for CPU
@@ -625,6 +639,8 @@ pub enum PCLK1 {
     TIM2,
     USART2,
     USART3,
+    I2C1,
+    // I2C2,
     // SPI3,
 }
 
@@ -651,6 +667,7 @@ impl ClockInterface for PeripheralClock {
                 PCLK1::TIM2 => unsafe { RCC.is_enabled_tim2_clock() },
                 PCLK1::USART2 => unsafe { RCC.is_enabled_usart2_clock() },
                 PCLK1::USART3 => unsafe { RCC.is_enabled_usart3_clock() },
+                PCLK1::I2C1 => unsafe { RCC.is_enabled_i2c1_clock() },
             },
             &PeripheralClock::APB2(ref v) => match v {
                 PCLK2::SPI1 => unsafe { RCC.is_enabled_spi1_clock() },
@@ -694,6 +711,9 @@ impl ClockInterface for PeripheralClock {
                 },
                 PCLK1::USART3 => unsafe {
                     RCC.enable_usart3_clock();
+                },
+                PCLK1::I2C1 => unsafe {
+                    RCC.enable_i2c1_clock();
                 },
             },
             &PeripheralClock::APB2(ref v) => match v {
@@ -744,6 +764,9 @@ impl ClockInterface for PeripheralClock {
                 },
                 PCLK1::USART3 => unsafe {
                     RCC.disable_usart3_clock();
+                },
+                PCLK1::I2C1 => unsafe {
+                    RCC.disable_i2c1_clock();
                 },
             },
             &PeripheralClock::APB2(ref v) => match v {
