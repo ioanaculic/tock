@@ -388,6 +388,9 @@ pub unsafe fn reset_handler() {
     // // See comment in `boards/imix/src/main.rs`
     // virtual_uart_rx_test::run_virtual_uart_receive(mux_uart);
 
+    let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(());
+    let sensor_i2c = components::i2c::I2CComponent::new(mux_i2c, 0).finalize(());
+
     // hprintln!("Initialization complete. Entering main loop").unwrap ();
     debug!("Initialization complete. Entering main loop");
 

@@ -411,6 +411,9 @@ impl I2C<'a> {
 }
 
 impl i2c::I2CMaster for I2C<'a> {
+	fn set_client(&self, master_client: &'static dyn I2CHwMasterClient) {
+		self.master_client.replace(master_client);
+	}
 	fn enable(&self) {
 		self.registers.cr1.modify(CR1::PE::SET);
 	}

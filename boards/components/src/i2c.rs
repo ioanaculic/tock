@@ -14,12 +14,9 @@
 //! Usage
 //! -----
 //! ```rust
-//! let mux_i2c = components::i2c::I2CMuxComponent::new().finalize(
-//!     components::i2c_mux_component_helper!(stm32f3xx::i2c::I2C1));
-//! let i2c_syscalls = I2CyscallComponent::new(mux_i2c, address).finalize(
-//!     components::i2c_syscalls_component_helper!(stm32f3xx::i2c::I2C1));
-//! let client_i2c = I2CComponent::new(mux_i2c, address).finalize(
-//!     components::spi_component_helper!(stm32f3xx::i2c::I2C1));
+//! let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(());
+//! let i2c_syscalls = components::i2c::I2CyscallComponent::new(mux_i2c, address).finalize(());
+//! let client_i2c = components::i2c::I2CComponent::new(mux_i2c, address).finalize(());
 //! ```
 
 // Author: Alexandru Radovici <msg4alex@gmail.com>
@@ -30,7 +27,7 @@ use capsules::i2c_master::I2CMasterDriver;
 use capsules::virtual_i2c::{I2CDevice, MuxI2C};
 use kernel::component::Component;
 use kernel::hil::i2c;
-use kernel::static_init_half;
+use kernel::static_init;
 
 // Setup static space for the objects.
 // #[macro_export]
@@ -42,40 +39,19 @@ use kernel::static_init_half;
 // 		};};
 // }
 
-#[macro_export]
-macro_rules! i2c_syscall_component_helper {
-	($S:ty) => {{
-		use capsules::i2c::I2CMasterDriver;
-		use core::mem::MaybeUninit;
-		static mut BUF1: MaybeUninit<I2CDevice<'static>> = MaybeUninit::uninit();
-		static mut BUF2: MaybeUninit<I2CMasterDriver<'static, I2CDevice<'static>>> =
-			MaybeUninit::uninit();
-		(&mut BUF1, &mut BUF2)
-		};};
-}
-
-#[macro_export]
-macro_rules! i2c_component_helper {
-	($S:ty) => {{
-		use core::mem::MaybeUninit;
-		static mut BUF: MaybeUninit<I2CDevice<'static>> = MaybeUninit::uninit();
-		&mut BUF
-		};};
-}
-
 pub struct I2CMuxComponent {
 	i2c: &'static dyn i2c::I2CMaster,
 }
 
-pub struct I2CSyscallComponent {
-	i2c_mux: &'static MuxI2C<'static>,
-	address: u8,
-}
-
-// pub struct I2CComponent<S: 'static + i2c::I2CMaster> {
+// pub struct I2CSyscallComponent {
 // 	i2c_mux: &'static MuxI2C<'static>,
 // 	address: u8,
 // }
+
+pub struct I2CComponent {
+	i2c_mux: &'static MuxI2C<'static>,
+	address: u8,
+}
 
 impl I2CMuxComponent {
 	pub fn new(i2c: &'static dyn i2c::I2CMaster) -> Self {
@@ -84,20 +60,19 @@ impl I2CMuxComponent {
 }
 
 impl Component for I2CMuxComponent {
-	type StaticInput = &'static dyn i2c::I2CMaster>;
+	type StaticInput = ();
 	type Output = &'static MuxI2C<'static>;
 
-	unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
+	unsafe fn finalize(self, _static_buffer: Self::StaticInput) -> Self::Output {
 		let mux_i2c = static_init!(MuxI2C<'static>, MuxI2C::new(self.i2c));
 
 		self.i2c.set_client(mux_i2c);
-		self.i2c.init();
 
 		mux_i2c
 	}
 }
 
-// impl<S: 'static + i2c::I2CMaster> I2CSyscallComponent<S> {
+// impl I2CSyscallComponent {
 // 	pub fn new(mux: &'static MuxI2C<'static>, address: u8) -> Self {
 // 		I2CSyscallComponent {
 // 			i2c_mux: mux,
@@ -106,23 +81,18 @@ impl Component for I2CMuxComponent {
 // 	}
 // }
 
-// impl<S: 'static + i2c::I2CMaster> Component for I2CSyscallComponent<S> {
-// 	type StaticInput = (
-// 		&'static mut MaybeUninit<I2CDevice<'static>>,
-// 		&'static mut MaybeUninit<I2CMasterDriver<'static, I2CDevice<'static>>>,
-// 	);
-// 	type Output = &'static I2CMasterDriver<'static, I2CDevice<'static>>;
+// impl Component for I2CSyscallComponent {
+// 	type StaticInput = ();
+// 	type Output = &'static I2CMasterDriver<I2CDevice<'static>>;
 
 // 	unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
-// 		let syscall_i2c_device = static_init_half!(
-// 			static_buffer.0,
-// 			I2CDevice<'static, S>,
+// 		let syscall_i2c_device = static_init!(
+// 			I2CDevice<'static>,
 // 			I2CDevice::new(self.i2c_mux, self.address)
 // 		);
 
-// 		let i2c_syscalls = static_init_half!(
-// 			static_buffer.1,
-// 			I2CMasterDriver<'static, I2CDevice<'static, S>>,
+// 		let i2c_syscalls = static_init!(
+// 			I2CMasterDriver<I2CDevice<'static>>,
 // 			I2CMasterDriver::new(syscall_i2c_device)
 // 		);
 
@@ -136,26 +106,25 @@ impl Component for I2CMuxComponent {
 // 	}
 // }
 
-// impl<S: 'static + i2c::I2CMaster> I2CComponent<S> {
-// 	pub fn new(mux: &'static MuxI2C<'static, S>, address: u8) -> Self {
-// 		I2CComponent {
-// 			i2c_mux: mux,
-// 			address: address,
-// 		}
-// 	}
-// }
+impl I2CComponent {
+	pub fn new(mux: &'static MuxI2C<'static>, address: u8) -> Self {
+		I2CComponent {
+			i2c_mux: mux,
+			address: address,
+		}
+	}
+}
 
-// impl<S: 'static + i2c::I2CMaster> Component for I2CComponent<S> {
-// 	type StaticInput = &'static mut MaybeUninit<I2CDevice<'static>>;
-// 	type Output = &'static I2CDevice<'static>;
+impl Component for I2CComponent {
+	type StaticInput = ();
+	type Output = &'static I2CDevice<'static>;
 
-// 	unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
-// 		let i2c_device = static_init_half!(
-// 			static_buffer,
-// 			I2CDevice<'static>,
-// 			I2CDevice::new(self.i2c_mux, self.address)
-// 		);
+	unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
+		let i2c_device = static_init!(
+			I2CDevice<'static>,
+			I2CDevice::new(self.i2c_mux, self.address)
+		);
 
-// 		i2c_device
-// 	}
-// }
+		i2c_device
+	}
+}
