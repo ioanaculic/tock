@@ -47,7 +47,7 @@ pub enum SlaveTransmissionType {
 
 /// Interface for an I2C Master hardware driver.
 pub trait I2CMaster {
-    fn set_client(&self, _client: &'static dyn I2CHwMasterClient) {
+    fn set_master_client(&self, _master_client: &'static dyn I2CHwMasterClient) {
         panic!("not implemented");
     }
     fn enable(&self);
@@ -59,7 +59,7 @@ pub trait I2CMaster {
 
 /// Interface for an I2C Slave hardware driver.
 pub trait I2CSlave {
-    fn set_client(&self, _client: Option<&'static dyn I2CHwSlaveClient>) {
+    fn set_slave_client(&self, _slave_client: Option<&'static dyn I2CHwSlaveClient>) {
         panic!("not implemented");
     }
     fn enable(&self);
