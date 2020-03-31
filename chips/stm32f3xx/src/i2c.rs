@@ -411,7 +411,7 @@ impl I2C<'a> {
 }
 
 impl i2c::I2CMaster for I2C<'a> {
-    fn set_client(&self, master_client: &'static dyn I2CHwMasterClient) {
+    fn set_master_client(&self, master_client: &'static dyn I2CHwMasterClient) {
         self.master_client.replace(master_client);
     }
     fn enable(&self) {
