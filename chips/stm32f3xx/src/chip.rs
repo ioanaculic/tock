@@ -4,6 +4,7 @@ use core::fmt::Write;
 use cortexm4;
 use kernel::common::deferred_call;
 use kernel::Chip;
+use kernel::debug;
 
 // uncomment this if you are using deferred tasks
 // use crate::deferred_call_tasks::Task;
@@ -64,7 +65,8 @@ impl Chip for Stm32f3xx {
                         nvic::EXTI15_10 => exti::EXTI.handle_interrupt(),
 
                         _ => {
-                            panic!("unhandled interrupt {}", interrupt);
+                            debug!("unhandled interrupt {}", interrupt);
+                            // panic!("unhandled interrupt {}", interrupt);
                         }
                     }
 

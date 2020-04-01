@@ -16,6 +16,8 @@ use kernel::hil::gpio::Configure;
 use kernel::hil::gpio::Output;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
+use kernel::hil::i2c::I2CDevice;
+use stm32f3xx::gpio::{AlternateFunction, Mode, PinId, PortId, PORT};
 
 /// Support routines for debugging I/O.
 pub mod io;
@@ -388,8 +390,37 @@ pub unsafe fn reset_handler() {
     // // See comment in `boards/imix/src/main.rs`
     // virtual_uart_rx_test::run_virtual_uart_receive(mux_uart);
 
+    stm32f3xx::i2c::I2C1.enable_clock ();
+    stm32f3xx::i2c::I2C1.set_speed (stm32f3xx::i2c::I2CSpeed::SPEED_100K, 8);
+
     let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(());
-    let sensor_i2c = components::i2c::I2CComponent::new(mux_i2c, 0).finalize(());
+    let sensor_i2c = components::i2c::I2CComponent::new(mux_i2c, 0x32).finalize(());
+
+    PinId::PB06.get_pin().as_ref().map(|pin| {
+        pin.set_mode(Mode::AlternateFunctionMode);
+        pin.set_floating_state (kernel::hil::gpio::FloatingState::PullNone);
+        // AF4 is I2C
+        pin.set_alternate_function(AlternateFunction::AF4);
+    });
+    PinId::PB07.get_pin().as_ref().map(|pin| {
+        pin.make_output ();
+        pin.set_floating_state (kernel::hil::gpio::FloatingState::PullNone);
+        pin.set_mode(Mode::AlternateFunctionMode);
+        // AF4 is I2C
+        pin.set_alternate_function(AlternateFunction::AF4);
+    });
+
+    static mut BUFFER:[u8; 120] = [0; 120];
+
+    let lsm303dlhc = static_init! (
+        capsules::lsm303dlhc::Lsm303dlhc,
+        capsules::lsm303dlhc::Lsm303dlhc::new (sensor_i2c, &mut BUFFER)
+    );
+    sensor_i2c.set_client (lsm303dlhc);
+
+    lsm303dlhc.is_present ();
+
+    // sensor_i2c.write (&mut BUFFER, 1);
 
     // hprintln!("Initialization complete. Entering main loop").unwrap ();
     debug!("Initialization complete. Entering main loop");

@@ -11,6 +11,12 @@ use kernel::{ClockInterface, ReturnCode};
 
 use crate::rcc;
 
+pub enum I2CSpeed {
+    SPEED_100K,
+    SPEED_400K,
+    SPEED_1M
+}
+
 /// Serial peripheral interface
 #[repr(C)]
 struct I2CRegisters {
@@ -255,7 +261,7 @@ enum I2CStatus {
 
 pub static mut I2C1: I2C = I2C::new(
     I2C1_BASE,
-    I2CClock(rcc::PeripheralClock::APB2(rcc::PCLK2::SPI1)),
+    I2CClock(rcc::PeripheralClock::APB1(rcc::PCLK1::I2C1)),
 );
 
 impl I2C<'a> {
@@ -279,11 +285,41 @@ impl I2C<'a> {
         }
     }
 
+    pub fn set_speed (&self, speed: I2CSpeed, system_clock_in_mhz: usize) {
+        debug! ("stm32f3 i2c set_speed");
+        self.disable ();
+        match speed {
+            I2CSpeed::SPEED_100K => {
+                let prescaler = system_clock_in_mhz / 4 - 1;
+                self.registers.timingr.modify (TIMINGR::PRESC.val (prescaler as u32) + 
+                    TIMINGR::SCLL.val (19) +
+                    TIMINGR::SCLH.val (15) +
+                    TIMINGR::SDAEL.val (2) + 
+                    TIMINGR::SCLDEL.val (4)
+                );
+            },
+            I2CSpeed::SPEED_400K => {
+                let prescaler = system_clock_in_mhz / 8 - 1;
+                self.registers.timingr.modify (TIMINGR::PRESC.val (prescaler as u32) + 
+                    TIMINGR::SCLL.val (9) +
+                    TIMINGR::SCLH.val (3) +
+                    TIMINGR::SDAEL.val (3) + 
+                    TIMINGR::SCLDEL.val (3)
+                );
+            },
+            I2CSpeed::SPEED_1M => {
+                panic! ("i2c speed 1MHz not implemented");
+            }
+        }
+        self.enable();
+    }
+
     pub fn is_enabled_clock(&self) -> bool {
         self.clock.is_enabled()
     }
 
     pub fn enable_clock(&self) {
+        debug! ("stm32f3 i2c enable clock");
         self.clock.enable();
     }
 
@@ -293,6 +329,7 @@ impl I2C<'a> {
 
     pub fn handle_event(&self) {
         debug!("stm32f3 i2c event");
+        self.registers.icr.modify (ICR::NACKCF::SET);
     }
 
     pub fn handle_error(&self) {
@@ -300,6 +337,7 @@ impl I2C<'a> {
     }
 
     pub fn handle_interrupt(&self) {
+        debug!("stm32f3 i2c interrupt");
         // if self.registers.sr.is_set(SR::TXE) {
         // 	if self.tx_buffer.is_some() && self.tx_position.get() < self.len.get() {
         // 		self.tx_buffer.map(|buf| {
@@ -415,14 +453,18 @@ impl i2c::I2CMaster for I2C<'a> {
         self.master_client.replace(master_client);
     }
     fn enable(&self) {
+        debug! ("stm32f3 i2c enable");
         self.registers.cr1.modify(CR1::PE::SET);
     }
     fn disable(&self) {
+        debug! ("stm32f3 i2c disable");
         self.registers.cr1.modify(CR1::PE::CLEAR);
     }
     fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {}
     fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
+        debug! ("stm32f3 i2c write");
         if self.status.get() == I2CStatus::Idle {
+            debug! ("stm32f3 i2c is idle write addr {} len {}", addr, len);
             self.status.set(I2CStatus::WritingOnly);
             self.slave_address.set(addr);
             self.buffer.replace(data);
@@ -430,7 +472,13 @@ impl i2c::I2CMaster for I2C<'a> {
             self.tx_len.set(len);
             self.registers.cr2.modify(CR2::NBYTES.val(len as u32));
             self.registers.cr2.modify(CR2::SADD.val(addr as u32));
-            self.registers.isr.modify(ISR::TXE::SET);
+            self.registers.cr2.modify(CR2::AUTOEND::SET);
+            self.registers.cr2.modify(CR2::RD_WRN::CLEAR);
+            // self.registers.cr1.modify(CR1::TXIE::SET + CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET + CR1::STOPIE::SET + CR1::RXIE::SET);
+            self.registers.cr1.modify(CR1::TXIE::SET);
+            self.registers.cr1.modify(CR1::NACKIE::SET);
+            // self.registers.cr1.modify(CR1::ERRIE::SET);
+            self.registers.cr2.modify(CR2::START::SET);
         }
     }
     fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {}

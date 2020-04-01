@@ -1,6 +1,7 @@
 use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::ClockInterface;
+use kernel::debug;
 
 /// Reset and clock control
 #[repr(C)]
@@ -594,11 +595,18 @@ impl Rcc {
     }
 
     fn enable_i2c1_clock(&self) {
+        debug! ("stm32d3 enable i2c clock");
         self.registers.apb1enr.modify(APB1ENR::I2C1EN::SET)
     }
 
     fn disable_i2c1_clock(&self) {
         self.registers.apb1enr.modify(APB1ENR::I2C1EN::CLEAR)
+    }
+
+    fn reset_i2c1 (&self)
+    {
+        self.registers.apb1rstr.modify (APB1RSTR::I2C1RST::SET);
+        self.registers.apb1rstr.modify (APB1RSTR::I2C1RST::CLEAR);
     }
 }
 
@@ -714,6 +722,7 @@ impl ClockInterface for PeripheralClock {
                 },
                 PCLK1::I2C1 => unsafe {
                     RCC.enable_i2c1_clock();
+                    RCC.reset_i2c1();
                 },
             },
             &PeripheralClock::APB2(ref v) => match v {
