@@ -18,6 +18,7 @@
 
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::debug;
 use kernel::hil::gpio;
 use kernel::hil::i2c;
 use kernel::{AppId, Callback, Driver, ReturnCode};
@@ -39,7 +40,7 @@ const CTRL_REG4_INTERRUPT1_DATAREADY: u8 = 0x01;
 
 #[derive(Clone, Copy, PartialEq)]
 enum State {
-    Idle
+    Idle,
 }
 
 pub struct Lsm303dlhc<'a> {
@@ -50,10 +51,7 @@ pub struct Lsm303dlhc<'a> {
 }
 
 impl Lsm303dlhc<'a> {
-    pub fn new(
-        i2c: &'a dyn i2c::I2CDevice,
-        buffer: &'static mut [u8],
-    ) -> Lsm303dlhc<'a> {
+    pub fn new(i2c: &'a dyn i2c::I2CDevice, buffer: &'static mut [u8]) -> Lsm303dlhc<'a> {
         // setup and return struct
         Lsm303dlhc {
             i2c: i2c,
@@ -68,17 +66,16 @@ impl Lsm303dlhc<'a> {
             // turn on i2c to send commands
             self.i2c.enable();
 
-            buf[0] = 0;
-            self.i2c.write(buf, 1);
+            buf[0] = 0x0F;
+            self.i2c.write_read(buf, 1, 1);
         });
     }
 }
 
 impl i2c::I2CClient for Lsm303dlhc<'a> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: i2c::Error) {
+        debug!("buffer {:?} error {:?}", buffer, _error);
     }
 }
 
-impl Driver for Lsm303dlhc<'a> {
-    
-}
+impl Driver for Lsm303dlhc<'a> {}

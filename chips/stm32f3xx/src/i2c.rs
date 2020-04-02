@@ -6,7 +6,7 @@ use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::debug;
 use kernel::hil;
-use kernel::hil::i2c::{self, I2CHwMasterClient, I2CMaster};
+use kernel::hil::i2c::{self, Error, I2CHwMasterClient, I2CMaster};
 use kernel::{ClockInterface, ReturnCode};
 
 use crate::rcc;
@@ -14,7 +14,7 @@ use crate::rcc;
 pub enum I2CSpeed {
     SPEED_100K,
     SPEED_400K,
-    SPEED_1M
+    SPEED_1M,
 }
 
 /// Serial peripheral interface
@@ -111,9 +111,9 @@ register_bitfields![u32,
         /// Slave address bit 9:8 (master mode)
         SADD8_9 OFFSET(8) NUMBITS(2) [],
         // Slave address bit 7:1 (master mode)
-        // SADD7_1 OFFSET(1) NUMBITS(7) [],
+        SADD7_1 OFFSET(1) NUMBITS(7) [],
         /// Slave address bit 0 (master mode)
-        SADD OFFSET(0) NUMBITS(8) []
+        SADD OFFSET(0) NUMBITS(1) []
     ],
     OAR1 [
         /// Own Address 1 enable
@@ -255,8 +255,6 @@ enum I2CStatus {
     Idle,
     Writing,
     Reading,
-    WritingOnly,
-    ReadingOnly,
 }
 
 pub static mut I2C1: I2C = I2C::new(
@@ -285,30 +283,32 @@ impl I2C<'a> {
         }
     }
 
-    pub fn set_speed (&self, speed: I2CSpeed, system_clock_in_mhz: usize) {
-        debug! ("stm32f3 i2c set_speed");
-        self.disable ();
+    pub fn set_speed(&self, speed: I2CSpeed, system_clock_in_mhz: usize) {
+        debug!("stm32f3 i2c set_speed");
+        self.disable();
         match speed {
             I2CSpeed::SPEED_100K => {
                 let prescaler = system_clock_in_mhz / 4 - 1;
-                self.registers.timingr.modify (TIMINGR::PRESC.val (prescaler as u32) + 
-                    TIMINGR::SCLL.val (19) +
-                    TIMINGR::SCLH.val (15) +
-                    TIMINGR::SDAEL.val (2) + 
-                    TIMINGR::SCLDEL.val (4)
+                self.registers.timingr.modify(
+                    TIMINGR::PRESC.val(prescaler as u32)
+                        + TIMINGR::SCLL.val(19)
+                        + TIMINGR::SCLH.val(15)
+                        + TIMINGR::SDAEL.val(2)
+                        + TIMINGR::SCLDEL.val(4),
                 );
-            },
+            }
             I2CSpeed::SPEED_400K => {
                 let prescaler = system_clock_in_mhz / 8 - 1;
-                self.registers.timingr.modify (TIMINGR::PRESC.val (prescaler as u32) + 
-                    TIMINGR::SCLL.val (9) +
-                    TIMINGR::SCLH.val (3) +
-                    TIMINGR::SDAEL.val (3) + 
-                    TIMINGR::SCLDEL.val (3)
+                self.registers.timingr.modify(
+                    TIMINGR::PRESC.val(prescaler as u32)
+                        + TIMINGR::SCLL.val(9)
+                        + TIMINGR::SCLH.val(3)
+                        + TIMINGR::SDAEL.val(3)
+                        + TIMINGR::SCLDEL.val(3),
                 );
-            },
+            }
             I2CSpeed::SPEED_1M => {
-                panic! ("i2c speed 1MHz not implemented");
+                panic!("i2c speed 1MHz not implemented");
             }
         }
         self.enable();
@@ -319,7 +319,7 @@ impl I2C<'a> {
     }
 
     pub fn enable_clock(&self) {
-        debug! ("stm32f3 i2c enable clock");
+        debug!("stm32f3 i2c enable clock");
         self.clock.enable();
     }
 
@@ -329,7 +329,102 @@ impl I2C<'a> {
 
     pub fn handle_event(&self) {
         debug!("stm32f3 i2c event");
-        self.registers.icr.modify (ICR::NACKCF::SET);
+        if self.registers.isr.is_set(ISR::TXIS) {
+            // send the next byte
+            if self.buffer.is_some() && self.tx_position.get() < self.tx_len.get() {
+                self.buffer.map(|buf| {
+                    let byte = buf[self.tx_position.get() as usize];
+                    debug!("sending byte {}", byte);
+                    self.registers.txdr.write(TXDR::TXDATA.val(byte as u32));
+                    self.tx_position.set(self.tx_position.get() + 1);
+                });
+            } else {
+                // TODO disable TXIE
+                debug!("i2c error, attempting to transmit more bytes than available in the buffer");
+            }
+        }
+
+        if self.registers.isr.is_set(ISR::RXNE) {
+            // send the next byte
+            let byte = self.registers.rxdr.read(RXDR::RXDATA) as u8;
+            if self.buffer.is_some() && self.rx_position.get() < self.rx_len.get() {
+                self.buffer.map(|buf| {
+                    debug!("read byte {}", byte);
+                    buf[self.rx_position.get() as usize] = byte;
+                    self.rx_position.set(self.rx_position.get() + 1);
+                });
+            } else {
+                // TODO disable RXIE
+                debug!("i2c drop byte");
+            }
+        }
+
+        if self.registers.isr.is_set(ISR::TC) {
+            debug!("i2c transfer complete");
+            if self.status.get() == I2CStatus::Writing {
+                debug!("i2c writing");
+                if self.tx_position.get() < self.tx_len.get() {
+                    self.master_client.map(|client| {
+                        self.buffer
+                            .take()
+                            .map(|buf| client.command_complete(buf, Error::DataNak))
+                    });
+                } else {
+                    self.status.set(I2CStatus::Reading);
+                    self.start_read();
+                };
+            }
+        }
+
+        if self.registers.isr.is_set(ISR::STOPF) {
+            debug!("i2c transfer stop");
+            self.registers.icr.modify(ICR::STOPCF::SET);
+            match self.status.get() {
+                I2CStatus::Writing => {
+                    debug!("i2c writing only");
+                    let error = if self.tx_position.get() == self.tx_len.get() {
+                        Error::CommandComplete
+                    } else {
+                        Error::DataNak
+                    };
+                    self.master_client.map(|client| {
+                        self.buffer
+                            .take()
+                            .map(|buf| client.command_complete(buf, error))
+                    });
+                    self.status.set(I2CStatus::Idle);
+                }
+                I2CStatus::Reading => {
+                    debug!("i2c reading");
+                    let error = if self.rx_position.get() == self.rx_len.get() {
+                        Error::CommandComplete
+                    } else {
+                        Error::DataNak
+                    };
+                    self.master_client.map(|client| {
+                        self.buffer
+                            .take()
+                            .map(|buf| client.command_complete(buf, error))
+                    });
+                    self.status.set(I2CStatus::Idle);
+                    self.stop();
+                }
+                _ => panic!("i2c should not arrive here"),
+            }
+        }
+
+        if self.registers.isr.is_set(ISR::NACKF) {
+            // abort transfer due to NACK
+            debug!("i2c not ack");
+            self.registers.icr.modify(ICR::NACKCF::SET);
+            self.master_client.map(|client| {
+                self.buffer
+                    .take()
+                    .map(|buf| client.command_complete(buf, Error::AddressNak))
+            });
+            self.stop();
+            self.status.set(I2CStatus::Idle);
+        }
     }
 
     pub fn handle_error(&self) {
@@ -446,6 +541,64 @@ impl I2C<'a> {
         // }
         ReturnCode::SUCCESS
     }
+
+    fn start_write(&self) {
+        debug!(
+            "stm32f3 i2c is idle write addr {} len {}",
+            self.slave_address.get(),
+            self.tx_len.get()
+        );
+        self.tx_position.set(0);
+        self.registers
+            .cr2
+            .modify(CR2::NBYTES.val(self.tx_len.get() as u32));
+        self.registers
+            .cr2
+            .modify(CR2::SADD7_1.val(self.slave_address.get() as u32));
+        self.registers.cr2.modify(CR2::RD_WRN::CLEAR);
+        self.registers.cr1.modify(
+            CR1::TXIE::SET + CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET + CR1::STOPIE::SET, // + CR1::RXIE::SET,
+        );
+        // self.registers.cr1.modify(CR1::TXIE::SET);
+        // self.registers.cr1.modify(CR1::NACKIE::SET);
+        // self.registers.cr1.modify(CR1::ERRIE::SET);
+        self.registers.cr2.modify(CR2::START::SET);
+    }
+
+    fn stop(&self) {
+        self.registers.cr1.modify(
+            CR1::TXIE::CLEAR
+                + CR1::ERRIE::CLEAR
+                + CR1::NACKIE::CLEAR
+                + CR1::TCIE::CLEAR
+                + CR1::STOPIE::CLEAR
+                + CR1::RXIE::CLEAR,
+        );
+    }
+
+    fn start_read(&self) {
+        debug!(
+            "stm32f3 i2c is idle read addr {} len {}",
+            self.slave_address.get(),
+            self.rx_len.get()
+        );
+        self.rx_position.set(0);
+        self.registers
+            .cr2
+            .modify(CR2::NBYTES.val(self.rx_len.get() as u32));
+        self.registers
+            .cr2
+            .modify(CR2::SADD7_1.val(self.slave_address.get() as u32));
+        self.registers.cr2.modify(CR2::AUTOEND::SET);
+        self.registers.cr2.modify(CR2::RD_WRN::SET);
+        self.registers.cr1.modify(
+            CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET + CR1::STOPIE::SET + CR1::RXIE::SET,
+        );
+        // self.registers.cr1.modify(CR1::TXIE::SET);
+        // self.registers.cr1.modify(CR1::NACKIE::SET);
+        // self.registers.cr1.modify(CR1::ERRIE::SET);
+        self.registers.cr2.modify(CR2::START::SET);
+    }
 }
 
 impl i2c::I2CMaster for I2C<'a> {
@@ -453,35 +606,46 @@ impl i2c::I2CMaster for I2C<'a> {
         self.master_client.replace(master_client);
     }
     fn enable(&self) {
-        debug! ("stm32f3 i2c enable");
+        debug!("stm32f3 i2c enable");
         self.registers.cr1.modify(CR1::PE::SET);
     }
     fn disable(&self) {
-        debug! ("stm32f3 i2c disable");
+        debug!("stm32f3 i2c disable");
         self.registers.cr1.modify(CR1::PE::CLEAR);
     }
-    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {}
-    fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
-        debug! ("stm32f3 i2c write");
+    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {
+        debug!("stm32f3 i2c write_read");
         if self.status.get() == I2CStatus::Idle {
-            debug! ("stm32f3 i2c is idle write addr {} len {}", addr, len);
-            self.status.set(I2CStatus::WritingOnly);
+            self.status.set(I2CStatus::Writing);
             self.slave_address.set(addr);
             self.buffer.replace(data);
-            self.tx_position.set(0);
-            self.tx_len.set(len);
-            self.registers.cr2.modify(CR2::NBYTES.val(len as u32));
-            self.registers.cr2.modify(CR2::SADD.val(addr as u32));
-            self.registers.cr2.modify(CR2::AUTOEND::SET);
-            self.registers.cr2.modify(CR2::RD_WRN::CLEAR);
-            // self.registers.cr1.modify(CR1::TXIE::SET + CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET + CR1::STOPIE::SET + CR1::RXIE::SET);
-            self.registers.cr1.modify(CR1::TXIE::SET);
-            self.registers.cr1.modify(CR1::NACKIE::SET);
-            // self.registers.cr1.modify(CR1::ERRIE::SET);
-            self.registers.cr2.modify(CR2::START::SET);
+            self.tx_len.set(write_len);
+            self.rx_len.set(read_len);
+            self.registers.cr2.modify(CR2::AUTOEND::CLEAR);
+            self.start_write();
         }
     }
-    fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {}
+    fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
+        debug!("stm32f3 i2c write");
+        if self.status.get() == I2CStatus::Idle {
+            self.status.set(I2CStatus::Writing);
+            self.slave_address.set(addr);
+            self.buffer.replace(data);
+            self.tx_len.set(len);
+            self.registers.cr2.modify(CR2::AUTOEND::SET);
+            self.start_write();
+        }
+    }
+    fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {
+        debug!("stm32f3 i2c read");
+        if self.status.get() == I2CStatus::Idle {
+            self.status.set(I2CStatus::Reading);
+            self.slave_address.set(addr);
+            self.buffer.replace(buffer);
+            self.rx_len.set(len);
+            self.start_read();
+        }
+    }
 }
 
 struct I2CClock(rcc::PeripheralClock);
