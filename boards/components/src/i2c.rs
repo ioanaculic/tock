@@ -19,7 +19,7 @@ use capsules::virtual_i2c::{I2CDevice, MuxI2C};
 use core::mem::MaybeUninit;
 use kernel::component::Component;
 use kernel::hil::i2c;
-use kernel::{static_init, static_init_half};
+use kernel::static_init_half;
 
 // Setup static space for the objects.
 #[macro_export]

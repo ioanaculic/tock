@@ -36,7 +36,7 @@ pub static mut BUFFER: [u8; 5] = [0; 5];
 /// Register values
 const REGISTER_AUTO_INCREMENT: u8 = 0x80;
 
-/// Registers
+/// Accelerometer Registers
 const CTRL_REG1: u8 = 0x20;
 const CTRL_REG4: u8 = 0x23;
 const OUT_X_L_A: u8 = 0x28;
@@ -46,9 +46,21 @@ const OUT_Y_H_A: u8 = 0x2B;
 const OUT_Z_L_A: u8 = 0x2C;
 const OUT_Z_H_A: u8 = 0x2D;
 
+/// Magnetometer Registers
+const CRA_REG_M: u8 = 0x00;
+const CRB_REG_M: u8 = 0x01;
+const OUT_X_H_M: u8 = 0x03;
+const OUT_X_L_M: u8 = 0x04;
+const OUT_Z_H_M: u8 = 0x05;
+const OUT_Z_L_M: u8 = 0x06;
+const OUT_Y_H_M: u8 = 0x07;
+const OUT_Y_L_M: u8 = 0x08;
+const TEMP_OUT_H_M: u8 = 0x31;
+const TEMP_OUT_L_M: u8 = 0x32;
+
 enum_from_primitive! {
     #[derive(Clone, Copy, PartialEq)]
-    pub enum Lsm303dlhcDataRate {
+    pub enum Lsm303dlhcAccelDataRate {
         Off = 0,
         DataRate1Hz = 1,
         DataRate10Hz = 2,
@@ -64,11 +76,39 @@ enum_from_primitive! {
 
 enum_from_primitive! {
     #[derive(Clone, Copy, PartialEq)]
+    pub enum Lsm303dlhcMagnetoDataRate {
+        DataRate0_75Hz = 0,
+        DataRate1_5Hz = 1,
+        DataRate3_0Hz = 2,
+        DataRate7_5Hz = 3,
+        DataRate15_0Hz = 4,
+        DataRate30_0Hz = 5,
+        DataRate75_0Hz = 6,
+        DataRate220_0Hz = 7,
+    }
+}
+
+enum_from_primitive! {
+    #[derive(Clone, Copy, PartialEq)]
     pub enum Lsm303dlhcScale {
         Scale2G = 0,
         Scale4G = 1,
         Scale8G = 2,
         Scale16G = 3
+    }
+}
+
+enum_from_primitive! {
+    #[derive(Clone, Copy, PartialEq)]
+    pub enum Lsm303dlhcRange {
+        Range1G = 0,
+        Range1_3G = 1,
+        Range1_9G = 2,
+        Range2_5G = 3,
+        Range4_0G = 4,
+        Range4_7G = 5,
+        Range5_6G = 7,
+        Range8_1 = 8,
     }
 }
 
@@ -79,6 +119,10 @@ enum State {
     SetPowerMode,
     SetScaleAndResolution,
     ReadAccelerationXYZ,
+    SetTemperatureDataRate,
+    SetRange,
+    ReadTemperature,
+    ReadMagnetometerXYZ,
 }
 
 pub struct Lsm303dlhc<'a> {
@@ -87,6 +131,7 @@ pub struct Lsm303dlhc<'a> {
     callback: OptionalCell<Callback>,
     state: Cell<State>,
     scale: Cell<Lsm303dlhcScale>,
+    range: Cell<Lsm303dlhcRange>,
     high_resolution: Cell<bool>,
     buffer: TakeCell<'static, [u8]>,
 }
@@ -104,6 +149,7 @@ impl Lsm303dlhc<'a> {
             callback: OptionalCell::empty(),
             state: Cell::new(State::Idle),
             scale: Cell::new(Lsm303dlhcScale::Scale2G),
+            range: Cell::new(Lsm303dlhcRange::Range1G),
             high_resolution: Cell::new(false),
             buffer: TakeCell::new(buffer),
         }
@@ -118,7 +164,7 @@ impl Lsm303dlhc<'a> {
         });
     }
 
-    pub fn set_power_mode(&self, data_rate: Lsm303dlhcDataRate, low_power: bool) {
+    pub fn set_power_mode(&self, data_rate: Lsm303dlhcAccelDataRate, low_power: bool) {
         if self.state.get() == State::Idle {
             self.state.set(State::SetPowerMode);
             self.buffer.take().map(|buf| {
@@ -149,6 +195,51 @@ impl Lsm303dlhc<'a> {
             self.buffer.take().map(|buf| {
                 buf[0] = OUT_X_L_A | REGISTER_AUTO_INCREMENT;
                 self.i2c_accelerometer.write_read(buf, 1, 6);
+            });
+        }
+    }
+
+    pub fn set_temperature_and_magneto_data_rate(&self, temperature: bool, data_rate: Lsm303dlhcMagnetoDataRate) {
+        if self.state.get() == State::Idle {
+            self.state.set(State::SetTemperatureDataRate);
+            self.buffer.take().map(|buf| {
+                buf[0] = CRA_REG_M;
+                buf[1] = ((data_rate as u8) << 2) | if temperature { 1 << 7 } else { 0 };
+                self.i2c_magnetometer.write(buf, 2);
+            });
+        }
+    }
+    
+    pub fn set_range(&self, range: Lsm303dlhcRange) {
+        if self.state.get() == State::Idle {
+            self.state.set(State::SetRange);
+            // TODO move these in completed
+            self.range.set(range);
+            self.buffer.take().map(|buf| {
+                buf[0] = CRB_REG_M;
+                buf[1] = (range as u8) << 5;
+                buf[2] = 0;
+                self.i2c_magnetometer.write(buf, 3);
+            });
+        }
+    }
+
+    pub fn read_temperature (&self) {
+        if self.state.get() == State::Idle {
+            self.state.set(State::ReadAccelerationXYZ);
+            self.buffer.take().map(|buf| {
+                buf[0] = TEMP_OUT_H_M;
+                self.i2c_magnetometer.write_read(buf, 1, 2);
+            });
+        }
+    }
+
+    pub fn read_magnetometer_xyz(&self) {
+        if self.state.get() == State::Idle {
+            self.state.set(State::ReadMagnetometerXYZ);
+            self.buffer.take().map(|buf| {
+                buf[0] = OUT_X_H_M;
+                self.i2c_magnetometer.write_read(buf, 1, 6);
             });
         }
     }
@@ -202,11 +293,86 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                     //         / 100000) as usize;
                     //     client.callback(x, y, z);
                     // });
-                    // actiual computation is this one
 
                     x = (buffer[0] as i16 | ((buffer[1] as i16) << 8)) as usize;
                     y = (buffer[2] as i16 | ((buffer[3] as i16) << 8)) as usize;
                     z = (buffer[4] as i16 | ((buffer[5] as i16) << 8)) as usize;
+                    true
+                } else {
+                    // self.nine_dof_client.map(|client| {
+                    //     client.callback(0, 0, 0);
+                    // });
+                    false
+                };
+                if values {
+                    self.callback.map(|callback| {
+                        callback.schedule(x, y, z);
+                    });
+                } else {
+                    self.callback.map(|callback| {
+                        callback.schedule(0, 0, 0);
+                    });
+                }
+            }
+            State::SetTemperatureDataRate => {
+                let set_temperature_and_magneto_data_rate = error == Error::CommandComplete;
+
+                self.callback.map(|callback| {
+                    callback.schedule(if set_temperature_and_magneto_data_rate { 1 } else { 0 }, 0, 0);
+                });
+            }
+            State::SetRange => {
+                let set_range = error == Error::CommandComplete;
+
+                self.callback.map(|callback| {
+                    callback.schedule(if set_range { 1 } else { 0 }, 0, 0);
+                });
+            }
+            State::ReadTemperature => {
+                let mut temp: usize = 0;
+                let values = if error == Error::CommandComplete {
+                    temp = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) >> 3) as usize;
+                    true
+                } else {
+                    // self.nine_dof_client.map(|client| {
+                    //     client.callback(0, 0, 0);
+                    // });
+                    false
+                };
+                if values {
+                    self.callback.map(|callback| {
+                        callback.schedule(temp, 0, 0);
+                    });
+                } else {
+                    self.callback.map(|callback| {
+                        callback.schedule(0, 0, 0);
+                    });
+                }
+            }
+            State::ReadMagnetometerXYZ => {
+                let mut x: usize = 0;
+                let mut y: usize = 0;
+                let mut z: usize = 0;
+                let values = if error == Error::CommandComplete {
+                    // self.nine_dof_client.map(|client| {
+                    //     // compute using only integers
+                    //     let scale = match self.scale.get() {
+                    //         0 => L3GD20_SCALE_250,
+                    //         1 => L3GD20_SCALE_500,
+                    //         _ => L3GD20_SCALE_2000,
+                    //     };
+                    //     let x: usize = ((buf[1] as i16 | ((buf[2] as i16) << 8)) as isize * scale
+                    //         / 100000) as usize;
+                    //     let y: usize = ((buf[3] as i16 | ((buf[4] as i16) << 8)) as isize * scale
+                    //         / 100000) as usize;
+                    //     let z: usize = ((buf[5] as i16 | ((buf[6] as i16) << 8)) as isize * scale
+                    //         / 100000) as usize;
+                    //     client.callback(x, y, z);
+                    // });
+
+                    x = (buffer[1] as i16 | ((buffer[0] as i16) << 8)) as usize;
+                    z = (buffer[3] as i16 | ((buffer[2] as i16) << 8)) as usize;
+                    y = (buffer[5] as i16 | ((buffer[4] as i16) << 8)) as usize;
                     true
                 } else {
                     // self.nine_dof_client.map(|client| {
@@ -249,10 +415,10 @@ impl Driver for Lsm303dlhc<'a> {
 				}
 
 			}
-			// Set Power Mode
+			// Set Accelerometer Power Mode
             2 => {
 				if self.state.get () == State::Idle {
-                    if let Some (data_rate) = Lsm303dlhcDataRate::from_usize (data1) {
+                    if let Some (data_rate) = Lsm303dlhcAccelDataRate::from_usize (data1) {
                         self.set_power_mode(data_rate, if data2 != 0 { true } else { false });
                         ReturnCode::SUCCESS
                     }
@@ -266,7 +432,7 @@ impl Driver for Lsm303dlhc<'a> {
 					ReturnCode::EBUSY
 				}
 			}
-			// Set Scale And Resolution
+			// Set Accelerometer Scale And Resolution
             3 => {
 				if self.state.get () == State::Idle {
 					if let Some (scale) = Lsm303dlhcScale::from_usize(data1) {
@@ -283,31 +449,40 @@ impl Driver for Lsm303dlhc<'a> {
 					ReturnCode::EBUSY
 				}
             }
-			// // Enable High Pass Filter
-            // 4 => {
-			// 	if self.status.get () == L3gd20Status::Idle {
-			// 		let mode = data1 as u8;
-			// 		let divider = data2 as u8;
-			// 		self.set_hpf_parameters (mode, divider);
-			// 		ReturnCode::SUCCESS
-			// 	}
-			// 	else
-			// 	{
-			// 		ReturnCode::EBUSY
-			// 	}
-			// }
-			// // Set High Pass Filter Mode and Divider
-            // 5 => {
-			// 	if self.status.get () == L3gd20Status::Idle {
-			// 		let enabled = if data1 == 1 { true } else { false };
-			// 		self.enable_hpf (enabled);
-			// 		ReturnCode::SUCCESS
-			// 	}
-			// 	else
-			// 	{
-			// 		ReturnCode::EBUSY
-			// 	}
-            // }
+            // Set Magnetometer Temperature Enable and Data Rate 
+            4 => {
+				if self.state.get () == State::SetTemperatureDataRate {
+                    if let Some (data_rate) = Lsm303dlhcMagnetoDataRate::from_usize (data2) {
+                        self.set_temperature_and_magneto_data_rate (if data1 != 0 { true } else { false }, data_rate);
+                        ReturnCode::SUCCESS
+                    }
+                    else
+                    {
+                        ReturnCode::EINVAL
+                    }
+				}
+				else
+				{
+					ReturnCode::EBUSY
+				}
+			}
+			// Set Magnetometer Range
+            5 => {
+				if self.state.get () == State::Idle {
+					if let Some (range) = Lsm303dlhcRange::from_usize(data1) {
+                        self.set_range(range);
+                        ReturnCode::SUCCESS
+                    }
+                    else
+                    {
+                        ReturnCode::EINVAL
+                    }
+				}
+				else
+				{
+					ReturnCode::EBUSY
+				}
+            }
 			// Read Acceleration XYZ
             6 => {
 				if self.state.get () == State::Idle {
@@ -318,18 +493,28 @@ impl Driver for Lsm303dlhc<'a> {
 				{
 					ReturnCode::EBUSY
 				}
+            }
+            // Read Temperature
+            7 => {
+				if self.state.get () == State::Idle {
+					self.read_temperature ();
+					ReturnCode::SUCCESS
+				}
+				else
+				{
+					ReturnCode::EBUSY
+				}
 			}
-			// // Read Temperature
-            // 7 => {
-			// 	if self.status.get () == L3gd20Status::Idle {
-			// 		self.read_temperature ();
-			// 		ReturnCode::SUCCESS
-			// 	}
-			// 	else
-			// 	{
-			// 		ReturnCode::EBUSY
-			// 	}
-            // }
+			8 => {
+				if self.state.get () == State::Idle {
+					self.read_magnetometer_xyz ();
+					ReturnCode::SUCCESS
+				}
+				else
+				{
+					ReturnCode::EBUSY
+				}
+            }
             // default
             _ => ReturnCode::ENOSUPPORT,
         }
