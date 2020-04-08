@@ -7,7 +7,6 @@ use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::{List, ListLink, ListNode};
 use kernel::hil::i2c::{self, Error, I2CClient, I2CHwMasterClient};
-use kernel::debug;
 
 pub struct MuxI2C<'a> {
     i2c: &'a dyn i2c::I2CMaster,
@@ -53,13 +52,11 @@ impl MuxI2C<'a> {
 
     fn do_next_op(&self) {
         if self.inflight.is_none() {
-            debug! ("not in flight");
             let mnode = self
                 .devices
                 .iter()
                 .find(|node| node.operation.get() != Op::Idle);
             mnode.map(|node| {
-                debug! ("dev");
                 node.buffer.take().map(|buf| {
                     match node.operation.get() {
                         Op::Write(len) => self.i2c.write(node.addr, buf, len),
@@ -109,7 +106,6 @@ impl I2CDevice<'a> {
     }
 
     pub fn set_client(&'a self, client: &'a dyn I2CClient) {
-        debug! ("set client");
         self.mux.devices.push_head(self);
         self.client.set(client);
     }
@@ -151,7 +147,6 @@ impl i2c::I2CDevice for I2CDevice<'a> {
     }
 
     fn write(&self, data: &'static mut [u8], len: u8) {
-        debug! ("virtual i2c write");
         self.buffer.replace(data);
         self.operation.set(Op::Write(len));
         self.mux.do_next_op();

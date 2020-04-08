@@ -65,6 +65,7 @@ struct STM32F3Discovery {
         'static,
         VirtualMuxAlarm<'static, stm32f3xx::tim2::Tim2<'static>>,
     >,
+    lsm303dlhc: &'static capsules::lsm303dlhc::Lsm303dlhc<'static>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -76,6 +77,7 @@ impl Platform for STM32F3Discovery {
         match driver_num {
             capsules::console::DRIVER_NUM => f(Some(self.console)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
+            capsules::lsm303dlhc::DRIVER_NUM => f(Some(self.lsm303dlhc)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
@@ -374,15 +376,6 @@ pub unsafe fn reset_handler() {
         stm32f3xx::gpio::PinId::PC09.get_pin().as_ref().unwrap()
     ));
 
-    let stm32f3discovery = STM32F3Discovery {
-        console: console,
-        ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
-        gpio: gpio,
-        led: led,
-        button: button,
-        alarm: alarm,
-    };
-
     // // Optional kernel tests
     // //
     // // See comment in `boards/imix/src/main.rs`
@@ -391,8 +384,9 @@ pub unsafe fn reset_handler() {
     stm32f3xx::i2c::I2C1.enable_clock();
     stm32f3xx::i2c::I2C1.set_speed(stm32f3xx::i2c::I2CSpeed::Speed100k, 8);
 
-    let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(());
-    let sensor_i2c = components::i2c::I2CComponent::new(mux_i2c, 0x1e).finalize(());
+    let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(components::i2c_mux_component_helper!());
+    let sensor_accelerometer_i2c = components::i2c::I2CComponent::new(mux_i2c, 0x19).finalize(components::i2c_component_helper!());
+    let sensor_magnetometer_i2c = components::i2c::I2CComponent::new(mux_i2c, 0x1e).finalize(components::i2c_component_helper!());
 
     PinId::PB06.get_pin().as_ref().map(|pin| {
         pin.set_mode(Mode::AlternateFunctionMode);
@@ -412,11 +406,24 @@ pub unsafe fn reset_handler() {
 
     let lsm303dlhc = static_init!(
         capsules::lsm303dlhc::Lsm303dlhc,
-        capsules::lsm303dlhc::Lsm303dlhc::new(sensor_i2c, &mut BUFFER)
+        capsules::lsm303dlhc::Lsm303dlhc::new(
+            sensor_accelerometer_i2c,
+            sensor_magnetometer_i2c,
+            &mut BUFFER
+        )
     );
-    sensor_i2c.set_client(lsm303dlhc);
+    sensor_accelerometer_i2c.set_client(lsm303dlhc);
+    sensor_magnetometer_i2c.set_client(lsm303dlhc);
 
-    lsm303dlhc.is_present();
+    let stm32f3discovery = STM32F3Discovery {
+        console: console,
+        ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
+        gpio: gpio,
+        led: led,
+        lsm303dlhc: lsm303dlhc,
+        button: button,
+        alarm: alarm,
+    };
 
     // sensor_i2c.write (&mut BUFFER, 1);
 

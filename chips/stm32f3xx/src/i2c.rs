@@ -246,13 +246,14 @@ pub struct I2C<'a> {
     slave_address: Cell<u8>,
 
     status: Cell<I2CStatus>,
-    // transfers: Cell<u8>,
+    // transfers: Cell<u8>
 }
 
 #[derive(Copy, Clone, PartialEq)]
 enum I2CStatus {
     Idle,
     Writing,
+    WritingReading,
     Reading,
 }
 
@@ -283,7 +284,7 @@ impl I2C<'a> {
     }
 
     pub fn set_speed(&self, speed: I2CSpeed, system_clock_in_mhz: usize) {
-        debug!("stm32f3 i2c set_speed");
+        // debug!("stm32f3 i2c set_speed");
         self.disable();
         match speed {
             I2CSpeed::Speed100k => {
@@ -318,7 +319,7 @@ impl I2C<'a> {
     }
 
     pub fn enable_clock(&self) {
-        debug!("stm32f3 i2c enable clock");
+        // debug!("stm32f3 i2c enable clock");
         self.clock.enable();
     }
 
@@ -327,74 +328,79 @@ impl I2C<'a> {
     }
 
     pub fn handle_event(&self) {
-        debug!("stm32f3 i2c event");
+        // debug!("stm32f3 i2c event");
         if self.registers.isr.is_set(ISR::TXIS) {
             // send the next byte
             if self.buffer.is_some() && self.tx_position.get() < self.tx_len.get() {
                 self.buffer.map(|buf| {
                     let byte = buf[self.tx_position.get() as usize];
-                    debug!("sending byte {}", byte);
+                    // debug!("sending byte {}", byte);
                     self.registers.txdr.write(TXDR::TXDATA.val(byte as u32));
                     self.tx_position.set(self.tx_position.get() + 1);
                 });
             } else {
                 // TODO disable TXIE
-                debug!("i2c error, attempting to transmit more bytes than available in the buffer");
+                // debug!("i2c error, attempting to transmit more bytes than available in the buffer");
             }
         }
 
-        if self.registers.isr.is_set(ISR::RXNE) {
+        while self.registers.isr.is_set(ISR::RXNE) {
             // send the next byte
             let byte = self.registers.rxdr.read(RXDR::RXDATA) as u8;
             if self.buffer.is_some() && self.rx_position.get() < self.rx_len.get() {
                 self.buffer.map(|buf| {
-                    debug!("read byte {}", byte);
+                    // debug!("read byte {}", byte);
                     buf[self.rx_position.get() as usize] = byte;
                     self.rx_position.set(self.rx_position.get() + 1);
                 });
             } else {
                 // TODO disable RXIE
-                debug!("i2c drop byte");
+                // debug!("i2c drop byte");
             }
         }
 
         if self.registers.isr.is_set(ISR::TC) {
-            debug!("i2c transfer complete");
-            if self.status.get() == I2CStatus::Writing {
-                debug!("i2c writing");
-                if self.tx_position.get() < self.tx_len.get() {
-                    self.master_client.map(|client| {
-                        self.buffer
-                            .take()
-                            .map(|buf| client.command_complete(buf, Error::DataNak))
-                    });
-                } else {
-                    self.status.set(I2CStatus::Reading);
-                    self.start_read();
-                };
-            }
-        }
-
-        if self.registers.isr.is_set(ISR::STOPF) {
-            debug!("i2c transfer stop");
-            self.registers.icr.modify(ICR::STOPCF::SET);
             match self.status.get() {
-                I2CStatus::Writing => {
-                    debug!("i2c writing only");
-                    let error = if self.tx_position.get() == self.tx_len.get() {
-                        Error::CommandComplete
+                I2CStatus::Writing | I2CStatus::WritingReading => {
+                    // debug!(
+                    //     "WriteRead transfer partial complete {}, {}",
+                    //     self.tx_position.get(),
+                    //     self.rx_position.get()
+                    // );
+                    if self.tx_position.get() < self.tx_len.get() {
+                        self.master_client.map(|client| {
+                            self.buffer
+                                .take()
+                                .map(|buf| client.command_complete(buf, Error::DataNak))
+                        });
+                        self.registers.cr2.modify(CR2::STOP::SET);
+                        self.stop();
                     } else {
-                        Error::DataNak
-                    };
-                    self.master_client.map(|client| {
-                        self.buffer
-                            .take()
-                            .map(|buf| client.command_complete(buf, error))
-                    });
-                    self.status.set(I2CStatus::Idle);
+                        // debug!(
+                        //     "Write transfer complete {}, {}",
+                        //     self.tx_position.get(),
+                        //     self.rx_position.get()
+                        // );
+                        if self.status.get() == I2CStatus::Writing {
+                            self.master_client.map(|client| {
+                                self.buffer
+                                    .take()
+                                    .map(|buf| client.command_complete(buf, Error::CommandComplete))
+                            });
+                            self.registers.cr2.modify(CR2::STOP::SET);
+                            self.stop();
+                        } else {
+                            self.status.set(I2CStatus::Reading);
+                            self.start_read();
+                        }
+                    }
                 }
                 I2CStatus::Reading => {
-                    debug!("i2c reading");
+                    // debug!(
+                    //     "Read transfer complete {}, {}",
+                    //     self.tx_position.get(),
+                    //     self.rx_position.get()
+                    // );
                     let error = if self.rx_position.get() == self.rx_len.get() {
                         Error::CommandComplete
                     } else {
@@ -405,37 +411,84 @@ impl I2C<'a> {
                             .take()
                             .map(|buf| client.command_complete(buf, error))
                     });
-                    self.status.set(I2CStatus::Idle);
+                    self.registers.cr2.modify(CR2::STOP::SET);
                     self.stop();
                 }
-                _ => panic!("i2c should not arrive here"),
+                _ => panic!("i2c should noy be here"),
             }
         }
 
+        // if self.registers.isr.is_set(ISR::STOPF) {
+        //     // debug!("i2c transfer stop");
+        //     self.registers.icr.modify(ICR::STOPCF::SET);
+        //     match self.status.get() {
+        //         I2CStatus::Writing => {
+        //             debug!("i2c writing only");
+        //             let error = if self.tx_position.get() == self.tx_len.get() {
+        //                 Error::CommandComplete
+        //             } else {
+        //                 Error::DataNak
+        //             };
+        //             self.master_client.map(|client| {
+        //                 self.buffer
+        //                     .take()
+        //                     .map(|buf| client.command_complete(buf, error))
+        //             });
+        //             self.stop();
+        //             self.status.set(I2CStatus::Idle);
+        //         }
+        //         I2CStatus::Reading => {
+        //             debug!(
+        //                 "Read transfer complete {}, {}",
+        //                 self.tx_position.get(),
+        //                 self.rx_position.get()
+        //             );
+        //             let error = if self.rx_position.get() == self.rx_len.get() {
+        //                 Error::CommandComplete
+        //             } else {
+        //                 Error::DataNak
+        //             };
+        //             self.master_client.map(|client| {
+        //                 self.buffer
+        //                     .take()
+        //                     .map(|buf| client.command_complete(buf, error))
+        //             });
+        //             self.registers.cr2.modify(CR2::STOP::SET);
+        //             self.stop();
+        //         }
+        //         _ => panic!("i2c should not arrive here"),
+        //     }
+        // }
+
         if self.registers.isr.is_set(ISR::NACKF) {
             // abort transfer due to NACK
-            debug!("i2c not ack");
+            // debug!("i2c not ack");
             self.registers.icr.modify(ICR::NACKCF::SET);
             self.master_client.map(|client| {
                 self.buffer
                     .take()
                     .map(|buf| client.command_complete(buf, Error::AddressNak))
             });
+            self.registers.cr2.modify(CR2::STOP::SET);
             self.stop();
-            self.status.set(I2CStatus::Idle);
         }
     }
 
     pub fn handle_error(&self) {
-        debug!("stm32f3 i2c error");
+        // debug!("stm32f3 i2c error");
+    }
+
+    fn reset(&self) {
+        self.disable();
+        self.enable();
     }
 
     fn start_write(&self) {
-        debug!(
-            "stm32f3 i2c is idle write addr {} len {}",
-            self.slave_address.get(),
-            self.tx_len.get()
-        );
+        // debug!(
+        //     "stm32f3 i2c is idle write addr {} len {}",
+        //     self.slave_address.get(),
+        //     self.tx_len.get()
+        // );
         self.tx_position.set(0);
         self.registers
             .cr2
@@ -445,7 +498,7 @@ impl I2C<'a> {
             .modify(CR2::SADD7_1.val(self.slave_address.get() as u32));
         self.registers.cr2.modify(CR2::RD_WRN::CLEAR);
         self.registers.cr1.modify(
-            CR1::TXIE::SET + CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET + CR1::STOPIE::SET, // + CR1::RXIE::SET,
+            CR1::TXIE::SET + CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET, // + CR1::STOPIE::SET, // + CR1::RXIE::SET,
         );
         // self.registers.cr1.modify(CR1::TXIE::SET);
         // self.registers.cr1.modify(CR1::NACKIE::SET);
@@ -462,14 +515,15 @@ impl I2C<'a> {
                 + CR1::STOPIE::CLEAR
                 + CR1::RXIE::CLEAR,
         );
+        self.status.set(I2CStatus::Idle);
     }
 
     fn start_read(&self) {
-        debug!(
-            "stm32f3 i2c is idle read addr {} len {}",
-            self.slave_address.get(),
-            self.rx_len.get()
-        );
+        // debug!(
+        //     "stm32f3 i2c is idle read addr {} len {}",
+        //     self.slave_address.get(),
+        //     self.rx_len.get()
+        // );
         self.rx_position.set(0);
         self.registers
             .cr2
@@ -477,11 +531,11 @@ impl I2C<'a> {
         self.registers
             .cr2
             .modify(CR2::SADD7_1.val(self.slave_address.get() as u32));
-        self.registers.cr2.modify(CR2::AUTOEND::SET);
+        self.registers.cr2.modify(CR2::AUTOEND::CLEAR);
         self.registers.cr2.modify(CR2::RD_WRN::SET);
-        self.registers.cr1.modify(
-            CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET + CR1::STOPIE::SET + CR1::RXIE::SET,
-        );
+        self.registers
+            .cr1
+            .modify(CR1::ERRIE::SET + CR1::NACKIE::SET + CR1::TCIE::SET + CR1::RXIE::SET);
         // self.registers.cr1.modify(CR1::TXIE::SET);
         // self.registers.cr1.modify(CR1::NACKIE::SET);
         // self.registers.cr1.modify(CR1::ERRIE::SET);
@@ -494,17 +548,18 @@ impl i2c::I2CMaster for I2C<'a> {
         self.master_client.replace(master_client);
     }
     fn enable(&self) {
-        debug!("stm32f3 i2c enable");
+        // debug!("stm32f3 i2c enable");
         self.registers.cr1.modify(CR1::PE::SET);
     }
     fn disable(&self) {
-        debug!("stm32f3 i2c disable");
+        // debug!("stm32f3 i2c disable");
         self.registers.cr1.modify(CR1::PE::CLEAR);
     }
     fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {
-        debug!("stm32f3 i2c write_read");
+        // debug!("stm32f3 i2c write_read {}", addr);
         if self.status.get() == I2CStatus::Idle {
-            self.status.set(I2CStatus::Writing);
+            self.reset();
+            self.status.set(I2CStatus::WritingReading);
             self.slave_address.set(addr);
             self.buffer.replace(data);
             self.tx_len.set(write_len);
@@ -514,23 +569,26 @@ impl i2c::I2CMaster for I2C<'a> {
         }
     }
     fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
-        debug!("stm32f3 i2c write");
+        // debug!("stm32f3 i2c write {}", addr);
         if self.status.get() == I2CStatus::Idle {
+            self.reset();
             self.status.set(I2CStatus::Writing);
             self.slave_address.set(addr);
             self.buffer.replace(data);
             self.tx_len.set(len);
-            self.registers.cr2.modify(CR2::AUTOEND::SET);
+            self.registers.cr2.modify(CR2::AUTOEND::CLEAR);
             self.start_write();
         }
     }
     fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {
-        debug!("stm32f3 i2c read");
+        // debug!("stm32f3 i2c read");
         if self.status.get() == I2CStatus::Idle {
+            self.reset();
             self.status.set(I2CStatus::Reading);
             self.slave_address.set(addr);
             self.buffer.replace(buffer);
             self.rx_len.set(len);
+            self.registers.cr2.modify(CR2::AUTOEND::CLEAR);
             self.start_read();
         }
     }
