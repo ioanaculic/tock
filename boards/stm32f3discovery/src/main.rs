@@ -14,7 +14,6 @@ use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferred
 use kernel::component::Component;
 use kernel::hil::gpio::Configure;
 use kernel::hil::gpio::Output;
-use kernel::hil::i2c::I2CDevice;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 use stm32f3xx::gpio::{AlternateFunction, Mode, PinId, PortId, PORT};
@@ -89,7 +88,6 @@ impl Platform for STM32F3Discovery {
 /// Helper function called during bring-up that configures multiplexed I/O.
 unsafe fn set_pin_primary_functions() {
     use stm32f3xx::exti::{LineId, EXTI};
-    use stm32f3xx::gpio::{AlternateFunction, Mode, PinId, PortId, PORT};
     use stm32f3xx::syscfg::SYSCFG;
 
     SYSCFG.enable_clock();
@@ -391,7 +389,7 @@ pub unsafe fn reset_handler() {
     // virtual_uart_rx_test::run_virtual_uart_receive(mux_uart);
 
     stm32f3xx::i2c::I2C1.enable_clock();
-    stm32f3xx::i2c::I2C1.set_speed(stm32f3xx::i2c::I2CSpeed::SPEED_100K, 8);
+    stm32f3xx::i2c::I2C1.set_speed(stm32f3xx::i2c::I2CSpeed::Speed100k, 8);
 
     let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(());
     let sensor_i2c = components::i2c::I2CComponent::new(mux_i2c, 0x1e).finalize(());

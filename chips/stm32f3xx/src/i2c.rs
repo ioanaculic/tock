@@ -1,20 +1,19 @@
 use core::cell::Cell;
-use core::cmp;
 
 use kernel::common::cells::{OptionalCell, TakeCell};
-use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
+use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::debug;
 use kernel::hil;
 use kernel::hil::i2c::{self, Error, I2CHwMasterClient, I2CMaster};
-use kernel::{ClockInterface, ReturnCode};
+use kernel::ClockInterface;
 
 use crate::rcc;
 
 pub enum I2CSpeed {
-    SPEED_100K,
-    SPEED_400K,
-    SPEED_1M,
+    Speed100k,
+    Seed400K,
+    Speed1M,
 }
 
 /// Serial peripheral interface
@@ -287,7 +286,7 @@ impl I2C<'a> {
         debug!("stm32f3 i2c set_speed");
         self.disable();
         match speed {
-            I2CSpeed::SPEED_100K => {
+            I2CSpeed::Speed100k => {
                 let prescaler = system_clock_in_mhz / 4 - 1;
                 self.registers.timingr.modify(
                     TIMINGR::PRESC.val(prescaler as u32)
@@ -297,7 +296,7 @@ impl I2C<'a> {
                         + TIMINGR::SCLDEL.val(4),
                 );
             }
-            I2CSpeed::SPEED_400K => {
+            I2CSpeed::Seed400K => {
                 let prescaler = system_clock_in_mhz / 8 - 1;
                 self.registers.timingr.modify(
                     TIMINGR::PRESC.val(prescaler as u32)
@@ -307,7 +306,7 @@ impl I2C<'a> {
                         + TIMINGR::SCLDEL.val(3),
                 );
             }
-            I2CSpeed::SPEED_1M => {
+            I2CSpeed::Speed1M => {
                 panic!("i2c speed 1MHz not implemented");
             }
         }
@@ -429,117 +428,6 @@ impl I2C<'a> {
 
     pub fn handle_error(&self) {
         debug!("stm32f3 i2c error");
-    }
-
-    pub fn handle_interrupt(&self) {
-        debug!("stm32f3 i2c interrupt");
-        // if self.registers.sr.is_set(SR::TXE) {
-        // 	if self.tx_buffer.is_some() && self.tx_position.get() < self.len.get() {
-        // 		self.tx_buffer.map(|buf| {
-        // 			self.registers
-        // 				.dr
-        // 				.write(DR::DR.val(buf[self.tx_position.get()]));
-        // 			self.tx_position.set(self.tx_position.get() + 1);
-        // 		});
-        // 	} else {
-        // 		self.registers.cr2.modify(CR2::TXEIE::CLEAR);
-        // 		self.transfers
-        // 			.set(self.transfers.get() & !SPI_WRITE_IN_PROGRESS);
-        // 	}
-        // }
-
-        // if self.registers.sr.is_set(SR::RXNE) {
-        // 	while self.registers.sr.read(SR::FRLVL) > 0 {
-        // 		let byte = self.registers.dr.read(DR::DR) as u8;
-        // 		if self.rx_buffer.is_some() && self.rx_position.get() < self.len.get() {
-        // 			self.rx_buffer.map(|buf| {
-        // 				buf[self.rx_position.get()] = byte;
-        // 			});
-        // 		}
-        // 		self.rx_position.set(self.rx_position.get() + 1);
-        // 	}
-
-        // 	if self.rx_position.get() >= self.len.get() {
-        // 		self.transfers
-        // 			.set(self.transfers.get() & !SPI_READ_IN_PROGRESS);
-        // 	}
-        // }
-
-        // if self.transfers.get() == SPI_IN_PROGRESS {
-        // 	self.master_client.map(|client| {
-        // 		self.tx_buffer
-        // 			.take()
-        // 			.map(|buf| client.read_write_done(buf, self.rx_buffer.take(), self.len.get()))
-        // 	});
-        // 	self.release_low();
-        // 	self.transfers.set(SPI_IDLE);
-        // }
-    }
-
-    fn set_cr<F>(&self, f: F)
-    where
-        F: FnOnce(),
-    {
-        // self.registers.cr1.modify(CR1::SPE::CLEAR);
-        // f();
-        // self.registers.cr1.modify(CR1::SPE::SET);
-    }
-
-    fn read_write_bytes(
-        &self,
-        write_buffer: Option<&'static mut [u8]>,
-        read_buffer: Option<&'static mut [u8]>,
-        len: usize,
-    ) -> ReturnCode {
-        // if write_buffer.is_none() && read_buffer.is_none() {
-        // 	return ReturnCode::EINVAL;
-        // }
-
-        // if self.transfers.get() == 0 {
-        // 	self.registers.cr2.modify(CR2::RXNEIE::CLEAR);
-        // 	self.hold_low();
-
-        // 	self.transfers.set(self.transfers.get() | SPI_IN_PROGRESS);
-
-        // 	let mut count: usize = len;
-        // 	write_buffer
-        // 		.as_ref()
-        // 		.map(|buf| count = cmp::min(count, buf.len()));
-        // 	read_buffer
-        // 		.as_ref()
-        // 		.map(|buf| count = cmp::min(count, buf.len()));
-
-        // 	if write_buffer.is_some() {
-        // 		self.transfers
-        // 			.set(self.transfers.get() | SPI_WRITE_IN_PROGRESS);
-        // 	}
-
-        // 	if read_buffer.is_some() {
-        // 		self.transfers
-        // 			.set(self.transfers.get() | SPI_READ_IN_PROGRESS);
-        // 	}
-
-        // 	self.rx_position.set(0);
-
-        // 	read_buffer.map(|buf| {
-        // 		self.rx_buffer.replace(buf);
-        // 		self.len.set(count);
-        // 	});
-
-        // 	self.registers.cr2.modify(CR2::RXNEIE::SET);
-
-        // 	write_buffer.map(|buf| {
-        // 		self.tx_buffer.replace(buf);
-        // 		self.len.set(count);
-        // 		self.tx_position.set(0);
-        // 		self.registers.cr2.modify(CR2::TXEIE::SET);
-        // 	});
-
-        // 	ReturnCode::SUCCESS
-        // } else {
-        // 	ReturnCode::EBUSY
-        // }
-        ReturnCode::SUCCESS
     }
 
     fn start_write(&self) {
