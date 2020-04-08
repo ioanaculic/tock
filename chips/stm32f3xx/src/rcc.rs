@@ -588,18 +588,20 @@ impl Rcc {
     }
 
     // ADC34 clock
+	#[cfg(feature = "stm32f303vct6")]
+    fn is_enabled_adc34_clock(&self) -> bool {
+        self.registers.ahbenr.is_set(AHBENR::ADC34EN)
+    }
 
-    // fn is_enabled_adc34_clock(&self) -> bool {
-    //     self.registers.ahbenr.is_set(AHBENR::ADC34EN)
-    // }
+	#[cfg(feature = "stm32f303vct6")]
+    fn enable_adc34_clock(&self) {
+        self.registers.ahbenr.modify(AHBENR::ADC34EN::SET)
+    }
 
-    // fn enable_adc34_clock(&self) {
-    //     self.registers.ahbenr.modify(AHBENR::ADC34EN::SET)
-    // }
-
-    // fn disable_adc34_clock(&self) {
-    //     self.registers.ahbenr.modify(AHBENR::ADC34EN::CLEAR)
-    // }
+    #[cfg(feature = "stm32f303vct6")]
+    fn disable_adc34_clock(&self) {
+        self.registers.ahbenr.modify(AHBENR::ADC34EN::CLEAR)
+    }
 }
 
 /// Clock sources for CPU
@@ -626,7 +628,8 @@ pub enum PeripheralClock {
 /// Peripherals clocked by HCLK1
 pub enum HCLK {
     ADC12,
-    // ADC34,
+    #[cfg(feature = "stm32f303vct6")]
+    ADC34,
     GPIOF,
     GPIOE,
     GPIOD,
@@ -653,9 +656,10 @@ impl ClockInterface for PeripheralClock {
     fn is_enabled(&self) -> bool {
         match self {
             &PeripheralClock::AHB(ref v) => match v {
-                HCLK::DMA1 => unsafe { RCC.is_enabled_dma1_clock() },
-                HCLK3::ADC12 => unsafe { RCC.is_enabled_adc12_clock() },
-                // HCLK::ADC34 => unsafe { RCC.is_enabled_adc34_clock() },
+                // HCLK::DMA1 => unsafe { RCC.is_enabled_dma1_clock() },
+                HCLK::ADC12 => unsafe { RCC.is_enabled_adc12_clock() },
+                #[cfg(feature = "stm32f303vct6")]
+                HCLK::ADC34 => unsafe { RCC.is_enabled_adc34_clock() },
                 HCLK::GPIOF => unsafe { RCC.is_enabled_gpiof_clock() },
                 HCLK::GPIOE => unsafe { RCC.is_enabled_gpioe_clock() },
                 HCLK::GPIOD => unsafe { RCC.is_enabled_gpiod_clock() },
@@ -679,15 +683,16 @@ impl ClockInterface for PeripheralClock {
     fn enable(&self) {
         match self {
             &PeripheralClock::AHB(ref v) => match v {
-                HCLK::DMA1 => unsafe {
-                    RCC.enable_dma1_clock();
-                },
-                HCLK3::ADC12 => unsafe {
+                // HCLK::DMA1 => unsafe {
+                //     RCC.enable_dma1_clock();
+                // },
+                HCLK::ADC12 => unsafe {
                     RCC.enable_adc12_clock();
                 },
-                // HCLK3::ADC34 => unsafe {
-                //     RCC.enable_adc34_clock();
-                // },
+                #[cfg(feature = "stm32f303vct6")]
+                HCLK::ADC34 => unsafe {
+                    RCC.enable_adc34_clock();
+                },
                 HCLK::GPIOF => unsafe {
                     RCC.enable_gpiof_clock();
                 },
@@ -735,15 +740,16 @@ impl ClockInterface for PeripheralClock {
     fn disable(&self) {
         match self {
             &PeripheralClock::AHB(ref v) => match v {
-                HCLK::DMA1 => unsafe {
-                    RCC.disable_dma1_clock();
-                },
-                HCLK3::ADC12 => unsafe {
+                // HCLK::DMA1 => unsafe {
+                //     RCC.disable_dma1_clock();
+                // },
+                HCLK::ADC12 => unsafe {
                     RCC.enable_adc12_clock();
                 },
-                // HCLK3::ADC34 => unsafe {
-                //     RCC.enable_adc34_clock();
-                // },
+                #[cfg(feature = "stm32f303vct6")]
+                HCLK3::ADC34 => unsafe {
+                    RCC.enable_adc34_clock();
+                },
                 HCLK::GPIOF => unsafe {
                     RCC.disable_gpiof_clock();
                 },

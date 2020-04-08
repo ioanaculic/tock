@@ -3,8 +3,8 @@ use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ClockInterface;
+use kernel::ReturnCode;
 
-use crate::returncode::ReturnCode;
 use crate::rcc;
 
 #[repr(C)]
@@ -270,7 +270,7 @@ const ADC_BASE: StaticRef<AdcRegisters> =
 
 #[allow(dead_code)]
 #[repr(u32)]
-enum ChannelId {
+enum Channel {
     Channel0 = 0b00000,
     Channel1 = 0b00001,
     Channel2 = 0b00010,
@@ -346,7 +346,9 @@ enum DataResolution {
 
 pub struct Adc {
 	registers: StaticRef<AdcRegisters>,
-	clock: AdcClock,
+	clock12: AdcClock,
+	#[cfg(feature = "stm32f303vct6")]
+	clock34: AdcClock,
 }
 
 pub static mut ADC: Adc = Adc::new();
@@ -355,9 +357,9 @@ impl Adc {
 	const fn new() -> Adc {
 		Adc {
 			registers: ADC_BASE,
-			clock12: AdcClock(rcc::PeripheralClock::AHB3(rcc::HCLK::ADC12)),
+			clock12: AdcClock(rcc::PeripheralClock::AHB(rcc::HCLK::ADC12)),
 			#[cfg(feature = "stm32f303vct6")]
-			clock34: AdcClock(rcc::PeripheralClock::AHB3(rcc::HCLK::ADC34)),
+			clock34: AdcClock(rcc::PeripheralClock::AHB(rcc::HCLK::ADC34)),
 		}
 	}
 
@@ -375,14 +377,15 @@ impl Adc {
 	}
 	
 	// 34
+	#[cfg(feature = "stm32f303vct6")]
 	pub fn is_enabled_clock34(&self) -> bool {
 		self.clock34.is_enabled()
 	}
-
+	#[cfg(feature = "stm32f303vct6")]
 	pub fn enable_clock34(&self) {
         self.clock34.enable();
     }
-
+	#[cfg(feature = "stm32f303vct6")]
     pub fn disable_clock34(&self) {
         self.clock34.disable();
     }
@@ -405,7 +408,27 @@ impl ClockInterface for AdcClock {
 }
 
 impl hil::adc::Adc for Adc {
+	type Channel = Channel;
+
 	fn sample(&self, channel: &Self::Channel) -> ReturnCode {
-		
+		let regs: &AdcRegisters = &*self.registers;
+
+		ReturnCode::SUCCESS
 	}
+
+    fn sample_continuous(&self, _channel: &Self::Channel, _frequency: u32) -> ReturnCode {
+        ReturnCode::FAIL
+    }
+
+    fn stop_sampling(&self) -> ReturnCode {
+        ReturnCode::FAIL
+    }
+
+	fn get_resolution_bits(&self) -> usize {
+        12
+	}
+	
+	fn get_voltage_reference_mv(&self) -> Option<usize> {
+        Some(3300)
+    }
 }
