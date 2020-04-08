@@ -1,6 +1,6 @@
 //! Components for I2C.
 //!
-//! This provides three components.
+//! This provides two components.
 //!
 //! 1. `I2CMuxComponent` provides a virtualization layer for a I2C bus.
 //!
@@ -9,24 +9,24 @@
 //! Usage
 //! -----
 //! ```rust
-//! llet mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(components::i2c_mux_component_helper!());
+//! let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f3xx::i2c::I2C1).finalize(components::i2c_mux_component_helper!());
 //! let client_i2c = components::i2c::I2CComponent::new(mux_i2c, 0x19).finalize(components::i2c_component_helper!());
 //! ```
 
 // Author: Alexandru Radovici <msg4alex@gmail.com>
 
 use capsules::virtual_i2c::{I2CDevice, MuxI2C};
+use core::mem::MaybeUninit;
 use kernel::component::Component;
 use kernel::hil::i2c;
 use kernel::{static_init, static_init_half};
-use core::mem::MaybeUninit;
 
 // Setup static space for the objects.
 #[macro_export]
 macro_rules! i2c_mux_component_helper {
     () => {{
-        use core::mem::MaybeUninit;
         use capsules::virtual_i2c::MuxI2C;
+        use core::mem::MaybeUninit;
         static mut BUF: MaybeUninit<MuxI2C<'static>> = MaybeUninit::uninit();
         &mut BUF
     };};
