@@ -18,11 +18,10 @@
 
 use core::cell::Cell;
 use enum_primitive::cast::FromPrimitive;
-use enum_primitive::cast::ToPrimitive;
 use enum_primitive::enum_from_primitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
-use kernel::hil::gpio;
+use kernel::hil::sensors;
 use kernel::hil::i2c::{self, Error};
 use kernel::{AppId, Callback, Driver, ReturnCode};
 
@@ -40,23 +39,27 @@ const REGISTER_AUTO_INCREMENT: u8 = 0x80;
 const CTRL_REG1: u8 = 0x20;
 const CTRL_REG4: u8 = 0x23;
 const OUT_X_L_A: u8 = 0x28;
-const OUT_X_H_A: u8 = 0x29;
-const OUT_Y_L_A: u8 = 0x2A;
-const OUT_Y_H_A: u8 = 0x2B;
-const OUT_Z_L_A: u8 = 0x2C;
-const OUT_Z_H_A: u8 = 0x2D;
+// const OUT_X_H_A: u8 = 0x29;
+// const OUT_Y_L_A: u8 = 0x2A;
+// const OUT_Y_H_A: u8 = 0x2B;
+// const OUT_Z_L_A: u8 = 0x2C;
+// const OUT_Z_H_A: u8 = 0x2D;
 
 /// Magnetometer Registers
 const CRA_REG_M: u8 = 0x00;
 const CRB_REG_M: u8 = 0x01;
 const OUT_X_H_M: u8 = 0x03;
-const OUT_X_L_M: u8 = 0x04;
-const OUT_Z_H_M: u8 = 0x05;
-const OUT_Z_L_M: u8 = 0x06;
-const OUT_Y_H_M: u8 = 0x07;
-const OUT_Y_L_M: u8 = 0x08;
+// const OUT_X_L_M: u8 = 0x04;
+// const OUT_Z_H_M: u8 = 0x05;
+// const OUT_Z_L_M: u8 = 0x06;
+// const OUT_Y_H_M: u8 = 0x07;
+// const OUT_Y_L_M: u8 = 0x08;
+
 const TEMP_OUT_H_M: u8 = 0x31;
-const TEMP_OUT_L_M: u8 = 0x32;
+// const TEMP_OUT_L_M: u8 = 0x32;
+
+// Experimental
+const TEMP_OFFSET: i8 = 17;
 
 enum_from_primitive! {
     #[derive(Clone, Copy, PartialEq)]
@@ -98,6 +101,8 @@ enum_from_primitive! {
     }
 }
 
+const SCALE_FACTOR:[u8; 4] = [2, 4, 8, 16];
+
 enum_from_primitive! {
     #[derive(Clone, Copy, PartialEq)]
     pub enum Lsm303dlhcRange {
@@ -111,6 +116,28 @@ enum_from_primitive! {
         Range8_1 = 8,
     }
 }
+
+const RANGE_FACTOR_X_Y:[i16; 8] = [
+    1, // placeholder
+    1100, 
+    855, 
+    670, 
+    450,
+    400, 
+    330, 
+    230, 
+    ];
+  
+const RANGE_FACTOR_Z:[i16; 8] = [
+    1, // placeholder
+    980,
+    760,
+    600,
+    400,
+    355,
+    295,
+    205
+    ];
 
 #[derive(Clone, Copy, PartialEq)]
 enum State {
@@ -126,14 +153,21 @@ enum State {
 }
 
 pub struct Lsm303dlhc<'a> {
+    config_in_progress: Cell<bool>,
     i2c_accelerometer: &'a dyn i2c::I2CDevice,
     i2c_magnetometer: &'a dyn i2c::I2CDevice,
     callback: OptionalCell<Callback>,
     state: Cell<State>,
-    scale: Cell<Lsm303dlhcScale>,
-    range: Cell<Lsm303dlhcRange>,
-    high_resolution: Cell<bool>,
+    accel_scale: Cell<Lsm303dlhcScale>,
+    mag_range: Cell<Lsm303dlhcRange>,
+    accel_high_resolution: Cell<bool>,
+    mag_data_rate: Cell<Lsm303dlhcMagnetoDataRate>,
+    accel_data_rate: Cell<Lsm303dlhcAccelDataRate>,
+    low_power: Cell<bool>,
+    temperature: Cell<bool>,
     buffer: TakeCell<'static, [u8]>,
+    nine_dof_client: OptionalCell<&'a dyn sensors::NineDofClient>,
+    temperature_client: OptionalCell<&'a dyn sensors::TemperatureClient>,
 }
 
 impl Lsm303dlhc<'a> {
@@ -144,14 +178,46 @@ impl Lsm303dlhc<'a> {
     ) -> Lsm303dlhc<'a> {
         // setup and return struct
         Lsm303dlhc {
+            config_in_progress: Cell::new (false),
             i2c_accelerometer: i2c_accelerometer,
             i2c_magnetometer: i2c_magnetometer,
             callback: OptionalCell::empty(),
             state: Cell::new(State::Idle),
-            scale: Cell::new(Lsm303dlhcScale::Scale2G),
-            range: Cell::new(Lsm303dlhcRange::Range1G),
-            high_resolution: Cell::new(false),
+            accel_scale: Cell::new(Lsm303dlhcScale::Scale2G),
+            mag_range: Cell::new(Lsm303dlhcRange::Range1G),
+            accel_high_resolution: Cell::new(false),
+            mag_data_rate: Cell::new (Lsm303dlhcMagnetoDataRate::DataRate0_75Hz),
+            accel_data_rate: Cell::new (Lsm303dlhcAccelDataRate::DataRate1Hz),
+            low_power: Cell::new (false),
+            temperature: Cell::new (false),
             buffer: TakeCell::new(buffer),
+            nine_dof_client: OptionalCell::empty (),
+            temperature_client: OptionalCell::empty ()
+        }
+    }
+
+    pub fn config(
+        &self,
+        accel_data_rate: Lsm303dlhcAccelDataRate,
+        low_power: bool,
+        accel_scale: Lsm303dlhcScale,
+        accel_high_resolution: bool,
+        temperature: bool,
+        mag_data_rate: Lsm303dlhcMagnetoDataRate,
+        mag_range: Lsm303dlhcRange,
+    ) {
+        if self.state.get () == State::Idle {
+            self.config_in_progress.set (true);
+
+            self.accel_scale.set (accel_scale);
+            self.accel_high_resolution.set (accel_high_resolution);
+            self.temperature.set (temperature);
+            self.mag_data_rate.set (mag_data_rate);
+            self.mag_range.set (mag_range);
+            self.accel_data_rate.set (accel_data_rate);
+            self.low_power.set (low_power);
+
+            self.set_power_mode(accel_data_rate, low_power);
         }
     }
 
@@ -164,7 +230,7 @@ impl Lsm303dlhc<'a> {
         });
     }
 
-    pub fn set_power_mode(&self, data_rate: Lsm303dlhcAccelDataRate, low_power: bool) {
+    fn set_power_mode(&self, data_rate: Lsm303dlhcAccelDataRate, low_power: bool) {
         if self.state.get() == State::Idle {
             self.state.set(State::SetPowerMode);
             self.buffer.take().map(|buf| {
@@ -175,12 +241,12 @@ impl Lsm303dlhc<'a> {
         }
     }
 
-    pub fn set_scale_and_resolution(&self, scale: Lsm303dlhcScale, high_resolution: bool) {
+    fn set_scale_and_resolution(&self, scale: Lsm303dlhcScale, high_resolution: bool) {
         if self.state.get() == State::Idle {
             self.state.set(State::SetScaleAndResolution);
             // TODO move these in completed
-            self.scale.set(scale);
-            self.high_resolution.set(high_resolution);
+            self.accel_scale.set(scale);
+            self.accel_high_resolution.set(high_resolution);
             self.buffer.take().map(|buf| {
                 buf[0] = CTRL_REG4;
                 buf[1] = (scale as u8) << 4 | if high_resolution { 1 } else { 0 } << 3;
@@ -189,7 +255,7 @@ impl Lsm303dlhc<'a> {
         }
     }
 
-    pub fn read_acceleration_xyz(&self) {
+    fn read_acceleration_xyz(&self) {
         if self.state.get() == State::Idle {
             self.state.set(State::ReadAccelerationXYZ);
             self.buffer.take().map(|buf| {
@@ -199,7 +265,11 @@ impl Lsm303dlhc<'a> {
         }
     }
 
-    pub fn set_temperature_and_magneto_data_rate(&self, temperature: bool, data_rate: Lsm303dlhcMagnetoDataRate) {
+    fn set_temperature_and_magneto_data_rate(
+        &self,
+        temperature: bool,
+        data_rate: Lsm303dlhcMagnetoDataRate,
+    ) {
         if self.state.get() == State::Idle {
             self.state.set(State::SetTemperatureDataRate);
             self.buffer.take().map(|buf| {
@@ -209,12 +279,12 @@ impl Lsm303dlhc<'a> {
             });
         }
     }
-    
-    pub fn set_range(&self, range: Lsm303dlhcRange) {
+
+    fn set_range(&self, range: Lsm303dlhcRange) {
         if self.state.get() == State::Idle {
             self.state.set(State::SetRange);
             // TODO move these in completed
-            self.range.set(range);
+            self.mag_range.set(range);
             self.buffer.take().map(|buf| {
                 buf[0] = CRB_REG_M;
                 buf[1] = (range as u8) << 5;
@@ -224,9 +294,9 @@ impl Lsm303dlhc<'a> {
         }
     }
 
-    pub fn read_temperature (&self) {
+    fn read_temperature(&self) {
         if self.state.get() == State::Idle {
-            self.state.set(State::ReadAccelerationXYZ);
+            self.state.set(State::ReadTemperature);
             self.buffer.take().map(|buf| {
                 buf[0] = TEMP_OUT_H_M;
                 self.i2c_magnetometer.write_read(buf, 1, 2);
@@ -234,7 +304,7 @@ impl Lsm303dlhc<'a> {
         }
     }
 
-    pub fn read_magnetometer_xyz(&self) {
+    fn read_magnetometer_xyz(&self) {
         if self.state.get() == State::Idle {
             self.state.set(State::ReadMagnetometerXYZ);
             self.buffer.take().map(|buf| {
@@ -247,6 +317,7 @@ impl Lsm303dlhc<'a> {
 
 impl i2c::I2CClient for Lsm303dlhc<'a> {
     fn command_complete(&self, buffer: &'static mut [u8], error: Error) {
+        self.state.set(State::Idle);
         match self.state.get() {
             State::IsPresent => {
                 let present = if error == Error::CommandComplete && buffer[0] == 60 {
@@ -258,6 +329,7 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                 self.callback.map(|callback| {
                     callback.schedule(if present { 1 } else { 0 }, 0, 0);
                 });
+                self.buffer.replace(buffer);
             }
             State::SetPowerMode => {
                 let set_power = error == Error::CommandComplete;
@@ -265,6 +337,10 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                 self.callback.map(|callback| {
                     callback.schedule(if set_power { 1 } else { 0 }, 0, 0);
                 });
+                self.buffer.replace(buffer);
+                if self.config_in_progress.get () {
+                    self.set_scale_and_resolution(self.accel_scale.get (), self.accel_high_resolution.get ());
+                }
             }
             State::SetScaleAndResolution => {
                 let set_scale_and_resolution = error == Error::CommandComplete;
@@ -272,27 +348,24 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                 self.callback.map(|callback| {
                     callback.schedule(if set_scale_and_resolution { 1 } else { 0 }, 0, 0);
                 });
+                self.buffer.replace(buffer);
+                if self.config_in_progress.get () {
+                    self.set_temperature_and_magneto_data_rate(self.temperature.get (), self.mag_data_rate.get ());
+                }
             }
             State::ReadAccelerationXYZ => {
                 let mut x: usize = 0;
                 let mut y: usize = 0;
                 let mut z: usize = 0;
                 let values = if error == Error::CommandComplete {
-                    // self.nine_dof_client.map(|client| {
-                    //     // compute using only integers
-                    //     let scale = match self.scale.get() {
-                    //         0 => L3GD20_SCALE_250,
-                    //         1 => L3GD20_SCALE_500,
-                    //         _ => L3GD20_SCALE_2000,
-                    //     };
-                    //     let x: usize = ((buf[1] as i16 | ((buf[2] as i16) << 8)) as isize * scale
-                    //         / 100000) as usize;
-                    //     let y: usize = ((buf[3] as i16 | ((buf[4] as i16) << 8)) as isize * scale
-                    //         / 100000) as usize;
-                    //     let z: usize = ((buf[5] as i16 | ((buf[6] as i16) << 8)) as isize * scale
-                    //         / 100000) as usize;
-                    //     client.callback(x, y, z);
-                    // });
+                    self.nine_dof_client.map(|client| {
+                        // compute using only integers
+                        let scale_factor = self.accel_scale.get () as usize;
+                        x = ((buffer[0] as i16 | ((buffer[1] as i16) << 8)) * (SCALE_FACTOR[scale_factor] as i16) * 1000) as usize / 32768;
+                        y = ((buffer[2] as i16 | ((buffer[3] as i16) << 8)) * (SCALE_FACTOR[scale_factor] as i16) * 1000) as usize / 32768;
+                        z = ((buffer[4] as i16 | ((buffer[5] as i16) << 8)) * (SCALE_FACTOR[scale_factor] as i16) * 1000) as usize / 32768;
+                        client.callback(x, y, z);
+                    });
 
                     x = (buffer[0] as i16 | ((buffer[1] as i16) << 8)) as usize;
                     y = (buffer[2] as i16 | ((buffer[3] as i16) << 8)) as usize;
@@ -318,8 +391,20 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                 let set_temperature_and_magneto_data_rate = error == Error::CommandComplete;
 
                 self.callback.map(|callback| {
-                    callback.schedule(if set_temperature_and_magneto_data_rate { 1 } else { 0 }, 0, 0);
+                    callback.schedule(
+                        if set_temperature_and_magneto_data_rate {
+                            1
+                        } else {
+                            0
+                        },
+                        0,
+                        0,
+                    );
                 });
+                self.buffer.replace(buffer);
+                if self.config_in_progress.get () {
+                    self.set_range(self.mag_range.get ());
+                }
             }
             State::SetRange => {
                 let set_range = error == Error::CommandComplete;
@@ -331,12 +416,15 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
             State::ReadTemperature => {
                 let mut temp: usize = 0;
                 let values = if error == Error::CommandComplete {
-                    temp = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) >> 3) as usize;
+                    temp = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) >> 4) as usize;
+                    self.temperature_client.map(|client| {
+                        client.callback((temp as i16 / 8 + TEMP_OFFSET as i16) as usize);
+                    });
                     true
                 } else {
-                    // self.nine_dof_client.map(|client| {
-                    //     client.callback(0, 0, 0);
-                    // });
+                    self.temperature_client.map(|client| {
+                        client.callback(0);
+                    });
                     false
                 };
                 if values {
@@ -348,36 +436,33 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                         callback.schedule(0, 0, 0);
                     });
                 }
+                self.buffer.replace(buffer);
+                if self.config_in_progress.get () {
+                    self.config_in_progress.set (false);
+                }
             }
             State::ReadMagnetometerXYZ => {
                 let mut x: usize = 0;
                 let mut y: usize = 0;
                 let mut z: usize = 0;
                 let values = if error == Error::CommandComplete {
-                    // self.nine_dof_client.map(|client| {
-                    //     // compute using only integers
-                    //     let scale = match self.scale.get() {
-                    //         0 => L3GD20_SCALE_250,
-                    //         1 => L3GD20_SCALE_500,
-                    //         _ => L3GD20_SCALE_2000,
-                    //     };
-                    //     let x: usize = ((buf[1] as i16 | ((buf[2] as i16) << 8)) as isize * scale
-                    //         / 100000) as usize;
-                    //     let y: usize = ((buf[3] as i16 | ((buf[4] as i16) << 8)) as isize * scale
-                    //         / 100000) as usize;
-                    //     let z: usize = ((buf[5] as i16 | ((buf[6] as i16) << 8)) as isize * scale
-                    //         / 100000) as usize;
-                    //     client.callback(x, y, z);
-                    // });
+                    self.nine_dof_client.map(|client| {
+                        // compute using only integers
+                        let range = self.mag_range.get () as usize;
+                        x = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) * 10 / RANGE_FACTOR_X_Y[range]) as usize;
+                        z = ((buffer[3] as i16 | ((buffer[2] as i16) << 8)) * 10 / RANGE_FACTOR_X_Y[range]) as usize;
+                        y = ((buffer[5] as i16 | ((buffer[4] as i16) << 8)) * 10 / RANGE_FACTOR_Z[range]) as usize;
+                        client.callback(x, y, z);
+                    });
 
                     x = (buffer[1] as i16 | ((buffer[0] as i16) << 8)) as usize;
                     z = (buffer[3] as i16 | ((buffer[2] as i16) << 8)) as usize;
                     y = (buffer[5] as i16 | ((buffer[4] as i16) << 8)) as usize;
                     true
                 } else {
-                    // self.nine_dof_client.map(|client| {
-                    //     client.callback(0, 0, 0);
-                    // });
+                    self.nine_dof_client.map(|client| {
+                        client.callback(0, 0, 0);
+                    });
                     false
                 };
                 if values {
@@ -389,13 +474,13 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                         callback.schedule(0, 0, 0);
                     });
                 }
+                self.buffer.replace(buffer);
             }
             _ => {
                 debug!("buffer {:?} error {:?}", buffer, error);
+                self.buffer.replace(buffer);
             }
         }
-        self.buffer.replace(buffer);
-        self.state.set(State::Idle);
     }
 }
 
@@ -451,7 +536,7 @@ impl Driver for Lsm303dlhc<'a> {
             }
             // Set Magnetometer Temperature Enable and Data Rate 
             4 => {
-				if self.state.get () == State::SetTemperatureDataRate {
+				if self.state.get () == State::Idle {
                     if let Some (data_rate) = Lsm303dlhcMagnetoDataRate::from_usize (data2) {
                         self.set_temperature_and_magneto_data_rate (if data1 != 0 { true } else { false }, data_rate);
                         ReturnCode::SUCCESS
@@ -533,6 +618,45 @@ impl Driver for Lsm303dlhc<'a> {
 			},
             // default
             _ => ReturnCode::ENOSUPPORT,
+        }
+    }
+}
+
+impl sensors::NineDof for Lsm303dlhc<'a> {
+    fn set_client(&self, nine_dof_client: &'a dyn sensors::NineDofClient) {
+        self.nine_dof_client.replace(nine_dof_client);
+    }
+
+    fn read_accelerometer(&self) -> ReturnCode {
+        if self.state.get() == State::Idle {
+            self.read_acceleration_xyz();
+            ReturnCode::SUCCESS
+        } else {
+            ReturnCode::EBUSY
+        }
+    }
+
+    fn read_magnetometer(&self) -> ReturnCode {
+        if self.state.get() == State::Idle {
+            self.read_magnetometer_xyz ();
+            ReturnCode::SUCCESS
+        } else {
+            ReturnCode::EBUSY
+        }
+    }
+}
+
+impl sensors::TemperatureDriver for Lsm303dlhc<'a> {
+    fn set_client(&self, temperature_client: &'a dyn sensors::TemperatureClient) {
+        self.temperature_client.replace(temperature_client);
+    }
+
+    fn read_temperature(&self) -> ReturnCode {
+        if self.state.get() == State::Idle {
+            self.read_temperature();
+            ReturnCode::SUCCESS
+        } else {
+            ReturnCode::EBUSY
         }
     }
 }

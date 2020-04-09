@@ -3,8 +3,8 @@
 use core::fmt::Write;
 use cortexm4;
 use kernel::common::deferred_call;
-use kernel::Chip;
 use kernel::debug;
+use kernel::Chip;
 
 // uncomment this if you are using deferred tasks
 // use crate::deferred_call_tasks::Task;

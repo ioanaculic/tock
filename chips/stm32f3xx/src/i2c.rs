@@ -12,7 +12,7 @@ use crate::rcc;
 
 pub enum I2CSpeed {
     Speed100k,
-    Seed400K,
+    Speed400k,
     Speed1M,
 }
 
@@ -297,7 +297,7 @@ impl I2C<'a> {
                         + TIMINGR::SCLDEL.val(4),
                 );
             }
-            I2CSpeed::Seed400K => {
+            I2CSpeed::Speed400k => {
                 let prescaler = system_clock_in_mhz / 8 - 1;
                 self.registers.timingr.modify(
                     TIMINGR::PRESC.val(prescaler as u32)
