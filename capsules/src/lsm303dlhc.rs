@@ -21,8 +21,8 @@ use enum_primitive::cast::FromPrimitive;
 use enum_primitive::enum_from_primitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
-use kernel::hil::sensors;
 use kernel::hil::i2c::{self, Error};
+use kernel::hil::sensors;
 use kernel::{AppId, Callback, Driver, ReturnCode};
 
 /// Syscall driver number.
@@ -101,7 +101,7 @@ enum_from_primitive! {
     }
 }
 
-const SCALE_FACTOR:[u8; 4] = [2, 4, 8, 16];
+const SCALE_FACTOR: [u8; 4] = [2, 4, 8, 16];
 
 enum_from_primitive! {
     #[derive(Clone, Copy, PartialEq)]
@@ -117,27 +117,15 @@ enum_from_primitive! {
     }
 }
 
-const RANGE_FACTOR_X_Y:[i16; 8] = [
+const RANGE_FACTOR_X_Y: [i16; 8] = [
     1, // placeholder
-    1100, 
-    855, 
-    670, 
-    450,
-    400, 
-    330, 
-    230, 
-    ];
-  
-const RANGE_FACTOR_Z:[i16; 8] = [
+    1100, 855, 670, 450, 400, 330, 230,
+];
+
+const RANGE_FACTOR_Z: [i16; 8] = [
     1, // placeholder
-    980,
-    760,
-    600,
-    400,
-    355,
-    295,
-    205
-    ];
+    980, 760, 600, 400, 355, 295, 205,
+];
 
 #[derive(Clone, Copy, PartialEq)]
 enum State {
@@ -178,7 +166,7 @@ impl Lsm303dlhc<'a> {
     ) -> Lsm303dlhc<'a> {
         // setup and return struct
         Lsm303dlhc {
-            config_in_progress: Cell::new (false),
+            config_in_progress: Cell::new(false),
             i2c_accelerometer: i2c_accelerometer,
             i2c_magnetometer: i2c_magnetometer,
             callback: OptionalCell::empty(),
@@ -186,13 +174,13 @@ impl Lsm303dlhc<'a> {
             accel_scale: Cell::new(Lsm303dlhcScale::Scale2G),
             mag_range: Cell::new(Lsm303dlhcRange::Range1G),
             accel_high_resolution: Cell::new(false),
-            mag_data_rate: Cell::new (Lsm303dlhcMagnetoDataRate::DataRate0_75Hz),
-            accel_data_rate: Cell::new (Lsm303dlhcAccelDataRate::DataRate1Hz),
-            low_power: Cell::new (false),
-            temperature: Cell::new (false),
+            mag_data_rate: Cell::new(Lsm303dlhcMagnetoDataRate::DataRate0_75Hz),
+            accel_data_rate: Cell::new(Lsm303dlhcAccelDataRate::DataRate1Hz),
+            low_power: Cell::new(false),
+            temperature: Cell::new(false),
             buffer: TakeCell::new(buffer),
-            nine_dof_client: OptionalCell::empty (),
-            temperature_client: OptionalCell::empty ()
+            nine_dof_client: OptionalCell::empty(),
+            temperature_client: OptionalCell::empty(),
         }
     }
 
@@ -206,16 +194,16 @@ impl Lsm303dlhc<'a> {
         mag_data_rate: Lsm303dlhcMagnetoDataRate,
         mag_range: Lsm303dlhcRange,
     ) {
-        if self.state.get () == State::Idle {
-            self.config_in_progress.set (true);
+        if self.state.get() == State::Idle {
+            self.config_in_progress.set(true);
 
-            self.accel_scale.set (accel_scale);
-            self.accel_high_resolution.set (accel_high_resolution);
-            self.temperature.set (temperature);
-            self.mag_data_rate.set (mag_data_rate);
-            self.mag_range.set (mag_range);
-            self.accel_data_rate.set (accel_data_rate);
-            self.low_power.set (low_power);
+            self.accel_scale.set(accel_scale);
+            self.accel_high_resolution.set(accel_high_resolution);
+            self.temperature.set(temperature);
+            self.mag_data_rate.set(mag_data_rate);
+            self.mag_range.set(mag_range);
+            self.accel_data_rate.set(accel_data_rate);
+            self.low_power.set(low_power);
 
             self.set_power_mode(accel_data_rate, low_power);
         }
@@ -338,8 +326,11 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                     callback.schedule(if set_power { 1 } else { 0 }, 0, 0);
                 });
                 self.buffer.replace(buffer);
-                if self.config_in_progress.get () {
-                    self.set_scale_and_resolution(self.accel_scale.get (), self.accel_high_resolution.get ());
+                if self.config_in_progress.get() {
+                    self.set_scale_and_resolution(
+                        self.accel_scale.get(),
+                        self.accel_high_resolution.get(),
+                    );
                 }
             }
             State::SetScaleAndResolution => {
@@ -349,8 +340,11 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                     callback.schedule(if set_scale_and_resolution { 1 } else { 0 }, 0, 0);
                 });
                 self.buffer.replace(buffer);
-                if self.config_in_progress.get () {
-                    self.set_temperature_and_magneto_data_rate(self.temperature.get (), self.mag_data_rate.get ());
+                if self.config_in_progress.get() {
+                    self.set_temperature_and_magneto_data_rate(
+                        self.temperature.get(),
+                        self.mag_data_rate.get(),
+                    );
                 }
             }
             State::ReadAccelerationXYZ => {
@@ -360,10 +354,19 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                 let values = if error == Error::CommandComplete {
                     self.nine_dof_client.map(|client| {
                         // compute using only integers
-                        let scale_factor = self.accel_scale.get () as usize;
-                        x = ((buffer[0] as i16 | ((buffer[1] as i16) << 8)) * (SCALE_FACTOR[scale_factor] as i16) * 1000) as usize / 32768;
-                        y = ((buffer[2] as i16 | ((buffer[3] as i16) << 8)) * (SCALE_FACTOR[scale_factor] as i16) * 1000) as usize / 32768;
-                        z = ((buffer[4] as i16 | ((buffer[5] as i16) << 8)) * (SCALE_FACTOR[scale_factor] as i16) * 1000) as usize / 32768;
+                        let scale_factor = self.accel_scale.get() as usize;
+                        x = ((buffer[0] as i16 | ((buffer[1] as i16) << 8))
+                            * (SCALE_FACTOR[scale_factor] as i16)
+                            * 1000) as usize
+                            / 32768;
+                        y = ((buffer[2] as i16 | ((buffer[3] as i16) << 8))
+                            * (SCALE_FACTOR[scale_factor] as i16)
+                            * 1000) as usize
+                            / 32768;
+                        z = ((buffer[4] as i16 | ((buffer[5] as i16) << 8))
+                            * (SCALE_FACTOR[scale_factor] as i16)
+                            * 1000) as usize
+                            / 32768;
                         client.callback(x, y, z);
                     });
 
@@ -402,8 +405,8 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                     );
                 });
                 self.buffer.replace(buffer);
-                if self.config_in_progress.get () {
-                    self.set_range(self.mag_range.get ());
+                if self.config_in_progress.get() {
+                    self.set_range(self.mag_range.get());
                 }
             }
             State::SetRange => {
@@ -437,8 +440,8 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                     });
                 }
                 self.buffer.replace(buffer);
-                if self.config_in_progress.get () {
-                    self.config_in_progress.set (false);
+                if self.config_in_progress.get() {
+                    self.config_in_progress.set(false);
                 }
             }
             State::ReadMagnetometerXYZ => {
@@ -448,10 +451,13 @@ impl i2c::I2CClient for Lsm303dlhc<'a> {
                 let values = if error == Error::CommandComplete {
                     self.nine_dof_client.map(|client| {
                         // compute using only integers
-                        let range = self.mag_range.get () as usize;
-                        x = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) * 10 / RANGE_FACTOR_X_Y[range]) as usize;
-                        z = ((buffer[3] as i16 | ((buffer[2] as i16) << 8)) * 10 / RANGE_FACTOR_X_Y[range]) as usize;
-                        y = ((buffer[5] as i16 | ((buffer[4] as i16) << 8)) * 10 / RANGE_FACTOR_Z[range]) as usize;
+                        let range = self.mag_range.get() as usize;
+                        x = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) * 10
+                            / RANGE_FACTOR_X_Y[range]) as usize;
+                        z = ((buffer[3] as i16 | ((buffer[2] as i16) << 8)) * 10
+                            / RANGE_FACTOR_X_Y[range]) as usize;
+                        y = ((buffer[5] as i16 | ((buffer[4] as i16) << 8)) * 10
+                            / RANGE_FACTOR_Z[range]) as usize;
                         client.callback(x, y, z);
                     });
 
@@ -638,7 +644,7 @@ impl sensors::NineDof for Lsm303dlhc<'a> {
 
     fn read_magnetometer(&self) -> ReturnCode {
         if self.state.get() == State::Idle {
-            self.read_magnetometer_xyz ();
+            self.read_magnetometer_xyz();
             ReturnCode::SUCCESS
         } else {
             ReturnCode::EBUSY
