@@ -25,9 +25,11 @@
 use core::cell::Cell;
 use enum_primitive::cast::FromPrimitive;
 use enum_primitive::enum_from_primitive;
-use kernel::common::cells::TakeCell;
+use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::debug;
 use kernel::hil::gpio;
 use kernel::hil::i2c::{self, Error};
+use kernel::hil::touch::{self, TouchEvent};
 use kernel::{AppId, Driver, ReturnCode};
 
 use crate::driver;
@@ -45,7 +47,8 @@ enum State {
 
 enum_from_primitive! {
     enum Registers {
-        REG_NUMTOUCHES = 0x2,
+        REG_GEST_ID = 0x01,
+        REG_TD_STATUS = 0x02,
         REG_CHIPID = 0xA3,
     }
 }
@@ -53,7 +56,7 @@ enum_from_primitive! {
 pub struct Ft6206<'a> {
     i2c: &'a dyn i2c::I2CDevice,
     interrupt_pin: &'a dyn gpio::InterruptPin,
-    // callback: OptionalCell<Callback>,
+    client: OptionalCell<&'static dyn touch::TouchClient>,
     state: Cell<State>,
     buffer: TakeCell<'static, [u8]>,
 }
@@ -69,7 +72,7 @@ impl<'a> Ft6206<'a> {
         Ft6206 {
             i2c: i2c,
             interrupt_pin: interrupt_pin,
-            // callback: OptionalCell::empty(),
+            client: OptionalCell::empty(),
             state: Cell::new(State::Idle),
             buffer: TakeCell::new(buffer),
         }
@@ -88,6 +91,19 @@ impl<'a> Ft6206<'a> {
 impl i2c::I2CClient for Ft6206<'_> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
         self.state.set(State::Idle);
+        self.client.map(|client| {
+            let num_touches = buffer[1] & 0x0F;
+            if num_touches <= 2 {
+                let event = match buffer[1] >> 6 {
+                    0x00 => TouchEvent::Pressed,
+                    0x01 => TouchEvent::Released,
+                    _ => TouchEvent::Released,
+                };
+                let x = (((buffer[2] & 0x0F) as usize) << 8) + (buffer[3] as usize);
+                let y = (((buffer[4] & 0x0F) as usize) << 8) + (buffer[5] as usize);
+                client.touch_event(event, x, y);
+            }
+        });
         self.buffer.replace(buffer);
         self.interrupt_pin
             .enable_interrupts(gpio::InterruptEdge::FallingEdge);
@@ -101,9 +117,23 @@ impl gpio::Client for Ft6206<'_> {
 
             self.state.set(State::ReadingTouches);
 
-            buffer[0] = 0;
-            self.i2c.write_read(buffer, 1, 16);
+            buffer[0] = Registers::REG_GEST_ID as u8;
+            self.i2c.write_read(buffer, 1, 15);
         });
+    }
+}
+
+impl touch::Touch for Ft6206<'_> {
+    fn enable(&self) -> ReturnCode {
+        ReturnCode::SUCCESS
+    }
+
+    fn disable(&self) -> ReturnCode {
+        ReturnCode::SUCCESS
+    }
+
+    fn set_client(&self, client: &'static dyn touch::TouchClient) {
+        self.client.replace(client);
     }
 }
 

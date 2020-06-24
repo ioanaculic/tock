@@ -13,7 +13,6 @@ use components::gpio::GpioComponent;
 use kernel::capabilities;
 use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferredCallClientState};
 use kernel::component::Component;
-use kernel::hil::gpio::Output;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 
@@ -55,7 +54,7 @@ struct STM32F412GDiscovery {
         VirtualMuxAlarm<'static, stm32f412g::tim2::Tim2<'static>>,
     >,
     gpio: &'static capsules::gpio::GPIO<'static, stm32f412g::gpio::Pin<'static>>,
-    ft6206: &'static capsules::ft6206::Ft6206<'static>,
+    touch: &'static capsules::touch::Touch<'static>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -71,7 +70,7 @@ impl Platform for STM32F412GDiscovery {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
-            capsules::ft6206::DRIVER_NUM => f(Some(self.ft6206)),
+            capsules::touch::DRIVER_NUM => f(Some(self.touch)),
             _ => f(None),
         }
     }
@@ -455,7 +454,9 @@ pub unsafe fn reset_handler() {
     )
     .finalize(components::ft6206_i2c_component_helper!(mux_i2c));
 
-    ft6206.is_present();
+    // ft6206.is_present();
+
+    let touch = components::touch::TouchComponent::new(board_kernel, ft6206).finalize(());
 
     let nucleo_f412g = STM32F412GDiscovery {
         console: console,
@@ -464,7 +465,7 @@ pub unsafe fn reset_handler() {
         button: button,
         alarm: alarm,
         gpio: gpio,
-        ft6206: ft6206,
+        touch: touch,
     };
 
     // // Optional kernel tests
