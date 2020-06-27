@@ -454,9 +454,9 @@ pub unsafe fn reset_handler() {
     )
     .finalize(components::ft6206_i2c_component_helper!(mux_i2c));
 
-    // ft6206.is_present();
+    ft6206.is_present();
 
-    let touch = components::touch::TouchComponent::new(board_kernel, ft6206).finalize(());
+    let touch = components::touch::TouchComponent::new(board_kernel, ft6206, Some(ft6206)).finalize(());
 
     let nucleo_f412g = STM32F412GDiscovery {
         console: console,

@@ -4,8 +4,14 @@
 //! -----
 //!
 //! ```rust
+//! // Just Touch 
 //! let touch =
-//!     components::touch::TouchComponent::new(board_kernel, ts)
+//!     components::touch::TouchComponent::new(board_kernel, ts, None)
+//!         .finalize(());
+//! 
+//! // With Gesture 
+//! let touch =
+//!     components::touch::TouchComponent::new(board_kernel, ts, Some(ts))
 //!         .finalize(());
 //! ```
 use kernel::capabilities;
@@ -16,16 +22,19 @@ use kernel::static_init;
 pub struct TouchComponent {
     board_kernel: &'static kernel::Kernel,
     touch: &'static dyn kernel::hil::touch::Touch,
+    gesture: Option<&'static dyn kernel::hil::touch::Gesture>,
 }
 
 impl TouchComponent {
     pub fn new(
         board_kernel: &'static kernel::Kernel,
         touch: &'static dyn kernel::hil::touch::Touch,
+        gesture: Option<&'static dyn kernel::hil::touch::Gesture>,
     ) -> TouchComponent {
         TouchComponent {
             board_kernel: board_kernel,
             touch: touch,
+            gesture: gesture,
         }
     }
 }
@@ -44,6 +53,9 @@ impl Component for TouchComponent {
         );
 
         kernel::hil::touch::Touch::set_client(self.touch, touch);
+        if let Some(gesture) = self.gesture {
+            kernel::hil::touch::Gesture::set_client(gesture, touch);
+        }
 
         touch
     }

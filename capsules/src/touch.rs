@@ -13,7 +13,7 @@
 // use core::convert::From;
 use kernel::debug;
 use kernel::hil;
-use kernel::hil::touch::TouchEvent;
+use kernel::hil::touch::{TouchEvent, TouchStatus, GestureEvent};
 use kernel::ReturnCode;
 use kernel::{AppId, Callback, Driver, Grant};
 
@@ -46,19 +46,36 @@ impl<'a> Touch<'a> {
 }
 
 impl<'a> hil::touch::TouchClient for Touch<'a> {
-    fn touch_event(&self, event: TouchEvent, x: usize, y: usize) {
-        debug!("touch {:?} x {} y {}", event, x, y);
+    fn touch_event(&self, event: TouchEvent) {
+        // debug!("touch {:?} x {} y {} area {:?} weight {:?}", event.status, event.x, event.y, event.area, event.weight);
         for app in self.apps.iter() {
             app.enter(|app, _| {
                 app.callback.map(|mut callback| {
-                    let event_id = match event {
-                        TouchEvent::Released => 0,
-                        TouchEvent::Pressed => 1,
+                    let event_id = match event.status {
+                        TouchStatus::Released => 0,
+                        TouchStatus::Pressed => 1,
                     };
-                    callback.schedule(x, y, event_id);
+                    callback.schedule(event.x, event.y, event_id);
                 })
             });
         }
+    }
+}
+
+impl<'a> hil::touch::GestureClient for Touch<'a> {
+    fn gesture_event(&self, event: GestureEvent) {
+        debug!("gesture {:?}", event);
+        // for app in self.apps.iter() {
+        //     app.enter(|app, _| {
+        //         app.callback.map(|mut callback| {
+        //             let event_id = match event.status {
+        //                 TouchStatus::Released => 0,
+        //                 TouchStatus::Pressed => 1,
+        //             };
+        //             callback.schedule(event.x, event.y, event_id);
+        //         })
+        //     });
+        // }
     }
 }
 

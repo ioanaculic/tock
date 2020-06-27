@@ -29,7 +29,7 @@ use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
 use kernel::hil::gpio;
 use kernel::hil::i2c::{self, Error};
-use kernel::hil::touch::{self, TouchEvent};
+use kernel::hil::touch::{self, TouchEvent, TouchStatus, GestureEvent};
 use kernel::{AppId, Driver, ReturnCode};
 
 use crate::driver;
@@ -56,8 +56,11 @@ enum_from_primitive! {
 pub struct Ft6206<'a> {
     i2c: &'a dyn i2c::I2CDevice,
     interrupt_pin: &'a dyn gpio::InterruptPin,
-    client: OptionalCell<&'static dyn touch::TouchClient>,
+    touch_client: OptionalCell<&'static dyn touch::TouchClient>,
+    gesture_client: OptionalCell<&'static dyn touch::GestureClient>,
+    multi_touch_client: OptionalCell<&'static dyn touch::MultiTouchClient>,
     state: Cell<State>,
+    num_touches: Cell<usize>,
     buffer: TakeCell<'static, [u8]>,
 }
 
@@ -72,8 +75,11 @@ impl<'a> Ft6206<'a> {
         Ft6206 {
             i2c: i2c,
             interrupt_pin: interrupt_pin,
-            client: OptionalCell::empty(),
+            touch_client: OptionalCell::empty(),
+            gesture_client: OptionalCell::empty(),
+            multi_touch_client: OptionalCell::empty(),
             state: Cell::new(State::Idle),
+            num_touches: Cell::new(0),
             buffer: TakeCell::new(buffer),
         }
     }
@@ -82,8 +88,9 @@ impl<'a> Ft6206<'a> {
         self.state.set(State::Idle);
         self.buffer.take().map(|buf| {
             // turn on i2c to send commands
-            buf[0] = Registers::REG_CHIPID as u8;
-            self.i2c.write_read(buf, 1, 1);
+            buf[0] = 0x92;
+            buf[1] = 250;
+            self.i2c.write(buf, 2);
         });
     }
 }
@@ -91,20 +98,52 @@ impl<'a> Ft6206<'a> {
 impl i2c::I2CClient for Ft6206<'_> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
         self.state.set(State::Idle);
-        self.client.map(|client| {
-            let num_touches = buffer[1] & 0x0F;
-            if num_touches <= 2 {
-                let event = match buffer[1] >> 6 {
-                    0x00 => TouchEvent::Pressed,
-                    0x01 => TouchEvent::Released,
-                    _ => TouchEvent::Released,
+        self.num_touches.set((buffer[1] & 0x0F) as usize);
+        self.touch_client.map(|client| {
+            if self.num_touches.get() <= 2 {
+                let status = match buffer[1] >> 6 {
+                    0x00 => TouchStatus::Pressed,
+                    0x01 => TouchStatus::Released,
+                    _ => TouchStatus::Released,
                 };
                 let x = (((buffer[2] & 0x0F) as usize) << 8) + (buffer[3] as usize);
                 let y = (((buffer[4] & 0x0F) as usize) << 8) + (buffer[5] as usize);
-                client.touch_event(event, x, y);
+                let weight = Some(buffer[6] as usize);
+                let area = Some(buffer[7] as usize);
+                client.touch_event(TouchEvent {
+                    status,
+                    x,
+                    y,
+                    id: 0,
+                    weight,
+                    area,
+                });
             }
         });
+        self.gesture_client.map(|client| {
+            if self.num_touches.get() <= 2 {
+                let gesture_event = match buffer[0] {
+                    0x10 => Some(GestureEvent::MoveUp),
+                    0x14 => Some(GestureEvent::MoveRight),
+                    0x18 => Some(GestureEvent::MoveDown),
+                    0x1C => Some(GestureEvent::MoveLeft),
+                    0x48 => Some(GestureEvent::ZoomIn),
+                    0x49 => Some(GestureEvent::ZoomOut),
+                    _ => None
+                };
+                debug! ("{}", buffer[0]);
+                if let Some(gesture) = gesture_event {
+                    client.gesture_event(gesture);
+                }
+            }
+        });
+        // put tyhe buffer back before the multi touch client might ask for events
         self.buffer.replace(buffer);
+        self.multi_touch_client.map(|client| {
+            if self.num_touches.get() <= 2 {
+                client.touch_event(self.num_touches.get ());
+            }
+        });
         self.interrupt_pin
             .enable_interrupts(gpio::InterruptEdge::FallingEdge);
     }
@@ -133,7 +172,61 @@ impl touch::Touch for Ft6206<'_> {
     }
 
     fn set_client(&self, client: &'static dyn touch::TouchClient) {
-        self.client.replace(client);
+        self.touch_client.replace(client);
+    }
+}
+
+impl touch::Gesture for Ft6206<'_> {
+    fn set_client(&self, client: &'static dyn touch::GestureClient) {
+        self.gesture_client.replace(client);
+    }
+}
+
+impl touch::MultiTouch for Ft6206<'_> {
+    fn enable(&self) -> ReturnCode {
+        ReturnCode::SUCCESS
+    }
+
+    fn disable(&self) -> ReturnCode {
+        ReturnCode::SUCCESS
+    }
+
+    fn get_num_touches(&self) -> usize {
+        2
+    }
+
+    fn get_touch(&self, index: usize) -> Option<TouchEvent> {
+        self.buffer.map_or(None, |buffer| {
+            if index <= self.num_touches.get() {
+                // a touch has 7 bytes
+                let offset = index * 7;
+                let status = match buffer[offset + 1] >> 6 {
+                    0x00 => TouchStatus::Pressed,
+                    0x01 => TouchStatus::Released,
+                    _ => TouchStatus::Released,
+                };
+                let x =
+                    (((buffer[offset + 2] & 0x0F) as usize) << 8) + (buffer[offset + 3] as usize);
+                let y =
+                    (((buffer[offset + 4] & 0x0F) as usize) << 8) + (buffer[offset + 5] as usize);
+                let weight = Some(buffer[offset + 6] as usize);
+                let area = Some(buffer[offset + 7] as usize);
+                Some(TouchEvent {
+                    status,
+                    x,
+                    y,
+                    id: 0,
+                    weight,
+                    area,
+                })
+            } else {
+                None
+            }
+        })
+    }
+
+    fn set_client(&self, client: &'static dyn touch::MultiTouchClient) {
+        self.multi_touch_client.replace(client);
     }
 }
 
