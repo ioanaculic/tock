@@ -15,13 +15,13 @@ pub enum GestureEvent {
     MoveLeft,
     MoveRight,
     ZoomIn,
-    ZoomOut
+    ZoomOut,
 }
 
 #[derive(Copy, Clone)]
 pub struct TouchEvent {
     pub status: TouchStatus,
-    // touch (x, y) position 
+    // touch (x, y) position
     pub x: usize,
     pub y: usize,
 

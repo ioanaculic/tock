@@ -456,7 +456,8 @@ pub unsafe fn reset_handler() {
 
     ft6206.is_present();
 
-    let touch = components::touch::TouchComponent::new(board_kernel, ft6206, Some(ft6206)).finalize(());
+    let touch = components::touch::TouchComponent::new(board_kernel, ft6206, Some(ft6206), None)
+        .finalize(());
 
     let nucleo_f412g = STM32F412GDiscovery {
         console: console,

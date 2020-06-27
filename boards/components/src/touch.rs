@@ -4,14 +4,14 @@
 //! -----
 //!
 //! ```rust
-//! // Just Touch 
+//! // Just Touch
 //! let touch =
-//!     components::touch::TouchComponent::new(board_kernel, ts, None)
+//!     components::touch::TouchComponent::new(board_kernel, ts, None, Some(screen))
 //!         .finalize(());
-//! 
-//! // With Gesture 
+//!
+//! // With Gesture
 //! let touch =
-//!     components::touch::TouchComponent::new(board_kernel, ts, Some(ts))
+//!     components::touch::TouchComponent::new(board_kernel, ts, Some(ts), Some(screen))
 //!         .finalize(());
 //! ```
 use kernel::capabilities;
@@ -23,6 +23,7 @@ pub struct TouchComponent {
     board_kernel: &'static kernel::Kernel,
     touch: &'static dyn kernel::hil::touch::Touch,
     gesture: Option<&'static dyn kernel::hil::touch::Gesture>,
+    screen: Option<&'static dyn kernel::hil::screen::Screen>,
 }
 
 impl TouchComponent {
@@ -30,11 +31,13 @@ impl TouchComponent {
         board_kernel: &'static kernel::Kernel,
         touch: &'static dyn kernel::hil::touch::Touch,
         gesture: Option<&'static dyn kernel::hil::touch::Gesture>,
+        screen: Option<&'static dyn kernel::hil::screen::Screen>,
     ) -> TouchComponent {
         TouchComponent {
             board_kernel: board_kernel,
             touch: touch,
             gesture: gesture,
+            screen: screen,
         }
     }
 }
@@ -49,7 +52,7 @@ impl Component for TouchComponent {
 
         let touch = static_init!(
             capsules::touch::Touch,
-            capsules::touch::Touch::new(self.touch, grant_touch)
+            capsules::touch::Touch::new(self.touch, grant_touch, self.screen)
         );
 
         kernel::hil::touch::Touch::set_client(self.touch, touch);

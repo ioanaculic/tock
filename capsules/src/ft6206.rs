@@ -29,7 +29,7 @@ use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
 use kernel::hil::gpio;
 use kernel::hil::i2c::{self, Error};
-use kernel::hil::touch::{self, TouchEvent, TouchStatus, GestureEvent};
+use kernel::hil::touch::{self, GestureEvent, TouchEvent, TouchStatus};
 use kernel::{AppId, Driver, ReturnCode};
 
 use crate::driver;
@@ -129,9 +129,9 @@ impl i2c::I2CClient for Ft6206<'_> {
                     0x1C => Some(GestureEvent::MoveLeft),
                     0x48 => Some(GestureEvent::ZoomIn),
                     0x49 => Some(GestureEvent::ZoomOut),
-                    _ => None
+                    _ => None,
                 };
-                debug! ("{}", buffer[0]);
+                debug!("{}", buffer[0]);
                 if let Some(gesture) = gesture_event {
                     client.gesture_event(gesture);
                 }
@@ -141,7 +141,7 @@ impl i2c::I2CClient for Ft6206<'_> {
         self.buffer.replace(buffer);
         self.multi_touch_client.map(|client| {
             if self.num_touches.get() <= 2 {
-                client.touch_event(self.num_touches.get ());
+                client.touch_event(self.num_touches.get());
             }
         });
         self.interrupt_pin

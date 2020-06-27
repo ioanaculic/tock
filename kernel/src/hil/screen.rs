@@ -1,6 +1,8 @@
 //! Interface for screens and displays.
 use crate::returncode::ReturnCode;
 
+/// Screen Rotation
+/// clockwise direction
 pub enum ScreenRotation {
     Normal,
     Rotated90,
