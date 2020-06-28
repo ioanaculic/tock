@@ -449,14 +449,12 @@ pub unsafe fn reset_handler() {
     )
     .finalize(components::i2c_mux_component_helper!());
 
-    let ft6206 = components::ft6206::Ft6206Component::new(
+    let ft6x06 = components::ft6x06::Ft6x06Component::new(
         stm32f412g::gpio::PinId::PG05.get_pin().as_ref().unwrap(),
     )
-    .finalize(components::ft6206_i2c_component_helper!(mux_i2c));
+    .finalize(components::ft6x06_i2c_component_helper!(mux_i2c));
 
-    ft6206.is_present();
-
-    let touch = components::touch::TouchComponent::new(board_kernel, ft6206, Some(ft6206), None)
+    let touch = components::touch::TouchComponent::new(board_kernel, ft6x06, Some(ft6x06), None)
         .finalize(());
 
     let nucleo_f412g = STM32F412GDiscovery {
