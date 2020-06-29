@@ -52,7 +52,7 @@ impl Component for TouchComponent {
 
         let touch = static_init!(
             capsules::touch::Touch,
-            capsules::touch::Touch::new(grant_touch, Some (self.touch), None, self.screen)
+            capsules::touch::Touch::new(grant_touch, Some(self.touch), None, self.screen)
         );
 
         kernel::hil::touch::Touch::set_client(self.touch, touch);

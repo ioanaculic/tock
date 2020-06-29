@@ -111,10 +111,10 @@ impl i2c::I2CClient for Ft6x06<'_> {
         self.gesture_client.map(|client| {
             if self.num_touches.get() <= 2 {
                 let gesture_event = match buffer[0] {
-                    0x10 => Some(GestureEvent::MoveUp),
-                    0x14 => Some(GestureEvent::MoveRight),
-                    0x18 => Some(GestureEvent::MoveDown),
-                    0x1C => Some(GestureEvent::MoveLeft),
+                    0x10 => Some(GestureEvent::SwipeUp),
+                    0x14 => Some(GestureEvent::SwipeRight),
+                    0x18 => Some(GestureEvent::SwipeDown),
+                    0x1C => Some(GestureEvent::SwipeLeft),
                     0x48 => Some(GestureEvent::ZoomIn),
                     0x49 => Some(GestureEvent::ZoomOut),
                     _ => None,

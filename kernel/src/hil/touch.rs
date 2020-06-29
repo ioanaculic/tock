@@ -50,7 +50,6 @@ pub trait Touch {
     fn set_client(&self, touch_client: &'static dyn TouchClient);
 }
 
-
 /// Multi-touch panels should implement this
 pub trait MultiTouch {
     /// Enable the touche panel
@@ -91,7 +90,6 @@ pub trait Gesture {
     /// Set the gesture client
     fn set_client(&self, gesture_client: &'static dyn GestureClient);
 }
-
 
 /// The gesture client
 pub trait GestureClient {

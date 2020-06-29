@@ -200,13 +200,15 @@ impl<'a> Driver for Touch<'a> {
             2 => self.touch.disable(),
 
             // Number of touches
-            3 => if let Some(ref multi_touch) = self.multi_touch {
-                ReturnCode::SuccessWithValue {value: multi_touch.get_num_touches ()}
-            }
-            else 
-            {
-                // simple touch
-                ReturnCode::SuccessWithValue {value :1}
+            3 => {
+                if let Some(ref multi_touch) = self.multi_touch {
+                    ReturnCode::SuccessWithValue {
+                        value: multi_touch.get_num_touches(),
+                    }
+                } else {
+                    // simple touch
+                    ReturnCode::SuccessWithValue { value: 1 }
+                }
             }
 
             _ => ReturnCode::ENOSUPPORT,
