@@ -27,7 +27,7 @@ pub const DRIVER_NUM: usize = driver::NUM::Touch as usize;
 pub struct App {
     touch_callback: Option<Callback>,
     gesture_callback: Option<Callback>,
-    _multi_touch_callback: Option<Callback>,
+    multi_touch_callback: Option<Callback>,
 }
 
 impl Default for App {
@@ -35,13 +35,14 @@ impl Default for App {
         App {
             touch_callback: None,
             gesture_callback: None,
-            _multi_touch_callback: None,
+            multi_touch_callback: None,
         }
     }
 }
 
 pub struct Touch<'a> {
     touch: &'a dyn hil::touch::Touch,
+    multi_touch: Option<&'a dyn hil::touch::MultiTouch>,
     /// Screen under the touch panel
     /// Most of the touch panels have a screen that can be rotated
     /// 90 deg (clockwise), 180 deg (upside-down), 270 deg(clockwise).
@@ -54,11 +55,13 @@ pub struct Touch<'a> {
 impl<'a> Touch<'a> {
     pub fn new(
         touch: &'a dyn hil::touch::Touch,
+        multi_touch: Option<&'a dyn hil::touch::MultiTouch>,
         grant: Grant<App>,
         screen: Option<&'a dyn hil::screen::Screen>,
     ) -> Touch<'a> {
         Touch {
             touch: touch,
+            multi_touch: multi_touch,
             screen: screen,
             apps: grant,
         }
@@ -119,10 +122,10 @@ impl<'a> hil::touch::GestureClient for Touch<'a> {
             app.enter(|app, _| {
                 app.gesture_callback.map(|mut callback| {
                     let gesture_id = match event {
-                        GestureEvent::MoveUp => 1,
-                        GestureEvent::MoveDown => 2,
-                        GestureEvent::MoveLeft => 3,
-                        GestureEvent::MoveRight => 4,
+                        GestureEvent::SwipeUp => 1,
+                        GestureEvent::SwipeDown => 2,
+                        GestureEvent::SwipeLeft => 3,
+                        GestureEvent::SwipeRight => 4,
                         GestureEvent::ZoomIn => 5,
                         GestureEvent::ZoomOut => 6,
                     };
@@ -159,20 +162,21 @@ impl<'a> Driver for Touch<'a> {
                 })
                 .unwrap_or_else(|err| err.into()),
 
-            _ => ReturnCode::ENOSUPPORT,
             // subscribe to multi touch
-            // 2 => {
-            //     if self.multi_touch.is_set() {
-            //         self.apps
-            //             .enter(app_id, |app, _| {
-            //                 app.multi_touch_callback = callback;
-            //                 ReturnCode::SUCCESS
-            //             })
-            //             .unwrap_or_else(|err| err.into())
-            //     } else {
-            //         ReturnCode::ENOSUPPORT
-            //     }
-            // }
+            2 => {
+                if self.multi_touch.is_some() {
+                    self.apps
+                        .enter(app_id, |app, _| {
+                            app.multi_touch_callback = callback;
+                            ReturnCode::SUCCESS
+                        })
+                        .unwrap_or_else(|err| err.into())
+                } else {
+                    ReturnCode::ENOSUPPORT
+                }
+            }
+
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
@@ -194,6 +198,16 @@ impl<'a> Driver for Touch<'a> {
             1 => self.touch.enable(),
             // Touch Disable
             2 => self.touch.disable(),
+
+            // Number of touches
+            3 => if let Some(ref multi_touch) = self.multi_touch {
+                ReturnCode::SuccessWithValue {value: multi_touch.get_num_touches ()}
+            }
+            else 
+            {
+                // simple touch
+                ReturnCode::SuccessWithValue {value :1}
+            }
 
             _ => ReturnCode::ENOSUPPORT,
         }
