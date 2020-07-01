@@ -20,9 +20,10 @@
 
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
-use kernel::hil::gpio;
+use kernel::hil::gpio::{self, Client};
 use kernel::hil::i2c;
 use kernel::{AppId, Callback, Driver, ReturnCode};
+use kernel::debug;
 
 /// Syscall driver number.
 use crate::driver;
@@ -67,7 +68,7 @@ enum Registers {
 }
 
 /// States of the I2C protocol with the LPS25HB.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum State {
     Idle,
 
@@ -95,7 +96,7 @@ enum State {
 
 pub struct LPS25HB<'a> {
     i2c: &'a dyn i2c::I2CDevice,
-    interrupt_pin: &'a dyn gpio::InterruptPin,
+    interrupt_pin: Option<&'a dyn gpio::InterruptPin>,
     callback: OptionalCell<Callback>,
     state: Cell<State>,
     buffer: TakeCell<'static, [u8]>,
@@ -104,7 +105,7 @@ pub struct LPS25HB<'a> {
 impl<'a> LPS25HB<'a> {
     pub fn new(
         i2c: &'a dyn i2c::I2CDevice,
-        interrupt_pin: &'a dyn gpio::InterruptPin,
+        interrupt_pin: Option<&'a dyn gpio::InterruptPin>,
         buffer: &'static mut [u8],
     ) -> LPS25HB<'a> {
         // setup and return struct
@@ -129,27 +130,33 @@ impl<'a> LPS25HB<'a> {
     }
 
     pub fn take_measurement(&self) {
-        self.interrupt_pin.make_input();
-        self.interrupt_pin
-            .enable_interrupts(gpio::InterruptEdge::RisingEdge);
-
-        self.buffer.take().map(|buf| {
-            // turn on i2c to send commands
-            self.i2c.enable();
-
-            buf[0] = Registers::CtrlReg1 as u8 | REGISTER_AUTO_INCREMENT;
-            buf[1] = 0;
-            buf[2] = 0;
-            buf[3] = 0;
-            buf[4] = CTRL_REG4_INTERRUPT1_DATAREADY;
-            self.i2c.write(buf, 5);
-            self.state.set(State::TakeMeasurementInit);
-        });
+        if let Some(ref interrupt_pin) = self.interrupt_pin {
+            interrupt_pin.make_input();
+            interrupt_pin
+                .enable_interrupts(gpio::InterruptEdge::RisingEdge);
+                self.buffer.take().map(|buf| {
+                    // turn on i2c to send commands
+                    self.i2c.enable();
+        
+                    buf[0] = Registers::CtrlReg1 as u8 | REGISTER_AUTO_INCREMENT;
+                    buf[1] = 0;
+                    buf[2] = 0;
+                    buf[3] = 0;
+                    buf[4] = CTRL_REG4_INTERRUPT1_DATAREADY;
+                    self.i2c.write(buf, 5);
+                    self.state.set(State::TakeMeasurementInit);
+                });
+        }
+        else
+        {
+            self.fired ();
+        }
     }
 }
 
 impl i2c::I2CClient for LPS25HB<'_> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: i2c::Error) {
+        debug! ("{:?} {:?}", buffer, self.state.get());
         match self.state.get() {
             State::SelectWhoAmI => {
                 self.i2c.read(buffer, 1);
@@ -191,10 +198,12 @@ impl i2c::I2CClient for LPS25HB<'_> {
                 self.callback
                     .map(|cb| cb.schedule(pressure_ubar as usize, 0, 0));
 
-                buffer[0] = Registers::CtrlReg1 as u8;
-                buffer[1] = 0;
-                self.i2c.write(buffer, 2);
-                self.interrupt_pin.disable_interrupts();
+                if let Some(ref interrupt_pin) = self.interrupt_pin {
+                    buffer[0] = Registers::CtrlReg1 as u8;
+                    buffer[1] = 0;
+                    self.i2c.write(buffer, 2);
+                    interrupt_pin.disable_interrupts();
+                }
                 self.state.set(State::Done);
             }
             State::Done => {
@@ -241,6 +250,7 @@ impl Driver for LPS25HB<'_> {
     }
 
     fn command(&self, command_num: usize, _: usize, _: usize, _: AppId) -> ReturnCode {
+        debug! ("command num {}", command_num);
         match command_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             // Take a pressure measurement

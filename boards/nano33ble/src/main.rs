@@ -40,6 +40,9 @@ const GPIO_D10: Pin = Pin::P1_02;
 const _UART_TX_PIN: Pin = Pin::P1_03;
 const _UART_RX_PIN: Pin = Pin::P1_10;
 
+const I2C_SDA1: Pin = Pin::P0_31;
+const I2C_SCL1: Pin = Pin::P0_02;
+
 /// UART Writer for panic!()s.
 pub mod io;
 
@@ -76,6 +79,7 @@ pub struct Platform {
         'static,
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
     >,
+    lps25hb: &'static capsules::lps25hb::LPS25HB<'static>,
 }
 
 impl kernel::Platform for Platform {
@@ -89,9 +93,11 @@ impl kernel::Platform for Platform {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
+            capsules::lps25hb::DRIVER_NUM => f(Some(self.lps25hb)),
             // capsules::ble_advertising_driver::DRIVER_NUM => f(Some(self.ble_radio)),
             // capsules::ieee802154::DRIVER_NUM => f(Some(radio)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
+            
             _ => f(None),
         }
     }
@@ -242,6 +248,32 @@ pub unsafe fn reset_handler() {
     // )
     // .finalize(());
 
+
+    // I2C
+
+    let mux_i2c = components::i2c::I2CMuxComponent::new(
+        &nrf52840::i2c::TWIM0,
+        None,
+        dynamic_deferred_caller,
+    )
+    .finalize(components::i2c_mux_component_helper!());
+
+    nrf52840::i2c::TWIM0.configure(
+        nrf52840::pinmux::Pinmux::new(I2C_SCL1 as u32),
+        nrf52840::pinmux::Pinmux::new(I2C_SDA1 as u32),
+    );
+
+    nrf52840::i2c::TWIM0.set_speed (nrf52840::i2c::Speed::K400);
+
+    let lps25hb_i2c = components::i2c::I2CComponent::new(mux_i2c, 0x5c)
+    .finalize(components::i2c_component_helper!());
+ let lps25hb = static_init!(
+     capsules::lps25hb::LPS25HB<'static>,
+     capsules::lps25hb::LPS25HB::new(lps25hb_i2c,
+         None,
+         &mut capsules::lps25hb::BUFFER));
+    lps25hb_i2c.set_client(lps25hb);
+
     //--------------------------------------------------------------------------
     // FINAL SETUP AND BOARD BOOT
     //--------------------------------------------------------------------------
@@ -258,6 +290,7 @@ pub unsafe fn reset_handler() {
         gpio: gpio,
         rng: rng,
         alarm: alarm,
+        lps25hb: lps25hb,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
     };
 
