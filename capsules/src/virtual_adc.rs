@@ -9,6 +9,20 @@ pub struct MuxAdc<'a, A: hil::adc::Adc> {
     inflight: OptionalCell<&'a AdcUser<'a A>>,
 }
 
+impl hil::adc::Client for MuxAdc <'_> {
+    fn sample_ready(&self, sample: u16) {
+        let mnode = self.devices.iter().find(|node| node.operation.is_some());
+        mnode.map(|node| {
+            if node.channel == inflight.channel {
+                if node.operation == Operation::SingleSample {
+                    node.client.sample_ready(sample);
+                    node.operation.set(Operation::Idle);
+                }
+            }
+        });
+    }
+}
+
 impl<'a, A: hil::adc::Adc> MuxAdc<'a A> {
     pub const fn new(adc: &'a A) -> MuxAdc<'a, A> {
         MuxAdc {
@@ -47,7 +61,7 @@ impl<'a, A: hil::adc::Adc> MuxAdc<'a A> {
                             self.adc.sample(&node.channel);
                         }
                         Operation::Idle => {
-                            self.adc.stop();
+                            self.adc.stop_sampling();
                             self.inflight.clear();
                         }
                     }
@@ -101,13 +115,21 @@ impl<A: hil::adc::Adc> hil::adc::AdcChannel for AdcUser<'_, A> {
         ReturnCode::SUCCESS
     }
 
-    fn stop(&self) -> ReturnCode {
+    fn stop_sampling(&self) -> ReturnCode {
         self.operation.set(Operation::Idle);
         self.mux.do_next_op();
         ReturnCode::SUCCESS
     }
 
-    fn get_channel(&self) -> usize {
-        self.mux.pwm.get_channel()
+    fn sample_continuous(&self, _channel: &Self::Channel, _frequency: u32) -> ReturnCode {
+        ReturnCode::FAIL
+    }
+
+    fn get_resolution_bits(&self) -> usize {
+        12
+    }
+
+    fn get_voltage_reference_mv(&self) -> Option<usize> {
+        Some(3300)
     }
 }
