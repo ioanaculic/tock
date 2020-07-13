@@ -109,7 +109,7 @@ impl<'a, A: hil::adc::Adc> ListNode<'a, AdcUser<'a, A>> for AdcUser<'a, A> {
 }
 
 impl<A: hil::adc::Adc> hil::adc::AdcChannel for AdcUser<'_, A> {
-    fn sample(&self, channel: usize) -> ReturnCode {
+    fn sample(&self) -> ReturnCode {
         self.operation.set(Operation::SingleSample);
         self.mux.do_next_op();
         ReturnCode::SUCCESS
@@ -121,8 +121,8 @@ impl<A: hil::adc::Adc> hil::adc::AdcChannel for AdcUser<'_, A> {
         ReturnCode::SUCCESS
     }
 
-    fn sample_continuous(&self, _channel: &Self::Channel, _frequency: u32) -> ReturnCode {
-        ReturnCode::FAIL
+    fn sample_continuous(&self) -> ReturnCode {
+        ReturnCode::ENOSUPPORT
     }
 
     fn get_resolution_bits(&self) -> usize {

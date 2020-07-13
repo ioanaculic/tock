@@ -118,7 +118,7 @@ pub trait AdcChannel {
     /// Request a single ADC sample on a particular channel.
     /// Used for individual samples that have no timing requirements.
     /// All ADC samples will be the raw ADC value left-justified in the u16.
-    fn sample(&self, channel: &Self::Channel) -> ReturnCode;
+    fn sample(&self) -> ReturnCode;
 
     /// Request repeated ADC samples on a particular channel.
     /// Callbacks will occur at the given frequency with low jitter and can be
@@ -126,7 +126,7 @@ pub trait AdcChannel {
     /// callbacks may be limited based on how quickly the system can service
     /// individual samples, leading to missed samples at high frequencies.
     /// All ADC samples will be the raw ADC value left-justified in the u16.
-    fn sample_continuous(&self, channel: &Self::Channel, frequency: u32) -> ReturnCode;
+    fn sample_continuous(&self) -> ReturnCode;
 
     /// Stop a sampling operation.
     /// Can be used to stop any simple or high-speed sampling operation. No
