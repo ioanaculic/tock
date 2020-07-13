@@ -113,3 +113,34 @@ pub trait HighSpeedClient {
     /// or stop sampling
     fn samples_ready(&self, buf: &'static mut [u16], length: usize);
 }
+
+pub trait AdcChannel {
+    /// Request a single ADC sample on a particular channel.
+    /// Used for individual samples that have no timing requirements.
+    /// All ADC samples will be the raw ADC value left-justified in the u16.
+    fn sample(&self, channel: &Self::Channel) -> ReturnCode;
+
+    /// Request repeated ADC samples on a particular channel.
+    /// Callbacks will occur at the given frequency with low jitter and can be
+    /// set to any frequency supported by the chip implementation. However
+    /// callbacks may be limited based on how quickly the system can service
+    /// individual samples, leading to missed samples at high frequencies.
+    /// All ADC samples will be the raw ADC value left-justified in the u16.
+    fn sample_continuous(&self, channel: &Self::Channel, frequency: u32) -> ReturnCode;
+
+    /// Stop a sampling operation.
+    /// Can be used to stop any simple or high-speed sampling operation. No
+    /// further callbacks will occur.
+    fn stop_sampling(&self) -> ReturnCode;
+
+    /// Function to ask the ADC how many bits of resolution are in the samples
+    /// it is returning.
+    fn get_resolution_bits(&self) -> usize;
+
+    /// Function to ask the ADC what reference voltage it used when taking the
+    /// samples. This allows the user of this interface to calculate an actual
+    /// voltage from the ADC reading.
+    ///
+    /// The returned reference voltage is in millivolts, or `None` if unknown.
+    fn get_voltage_reference_mv(&self) -> Option<usize>;
+}
