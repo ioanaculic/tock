@@ -7,7 +7,7 @@ use crate::returncode::ReturnCode;
 /// Simple interface for reading an ADC sample on any channel.
 pub trait Adc {
     /// The chip-dependent type of an ADC channel.
-    type Channel;
+    type Channel: PartialEq;
 
     /// Request a single ADC sample on a particular channel.
     /// Used for individual samples that have no timing requirements.
@@ -37,6 +37,8 @@ pub trait Adc {
     ///
     /// The returned reference voltage is in millivolts, or `None` if unknown.
     fn get_voltage_reference_mv(&self) -> Option<usize>;
+
+    fn set_client(&self, client: &'static dyn Client);
 }
 
 /// Trait for handling callbacks from simple ADC calls.
@@ -143,4 +145,6 @@ pub trait AdcChannel {
     ///
     /// The returned reference voltage is in millivolts, or `None` if unknown.
     fn get_voltage_reference_mv(&self) -> Option<usize>;
+
+    fn set_client(&self, client: &'static dyn Client);
 }

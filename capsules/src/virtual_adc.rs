@@ -5,25 +5,29 @@ use kernel::ReturnCode;
 
 pub struct MuxAdc<'a, A: hil::adc::Adc> {
     adc: &'a A,
-    devices: List<'a, AdcUser<'a A>>,
-    inflight: OptionalCell<&'a AdcUser<'a A>>,
+    devices: List<'a, AdcUser<'a, A>>,
+    inflight: OptionalCell<&'a AdcUser<'a, A>>,
 }
 
-impl hil::adc::Client for MuxAdc <'_> {
+impl<'a, A: hil::adc::Adc> hil::adc::Client for MuxAdc<'a, A> {
     fn sample_ready(&self, sample: u16) {
-        let mnode = self.devices.iter().find(|node| node.operation.is_some());
-        mnode.map(|node| {
-            if node.channel == inflight.channel {
-                if node.operation == Operation::SingleSample {
-                    node.client.sample_ready(sample);
-                    node.operation.set(Operation::Idle);
+        for node in self.devices.iter() {
+            self.inflight.map(|inflight| {
+                if node.channel == inflight.channel {
+                    node.operation.map(|operation| match operation {
+                        Operation::SingleSample => {
+                            node.client.map(|client| client.sample_ready(sample));
+                            node.operation.clear();
+                        }
+                    });
                 }
-            }
-        });
+            });
+        }
+        self.do_next_op();
     }
 }
 
-impl<'a, A: hil::adc::Adc> MuxAdc<'a A> {
+impl<'a, A: hil::adc::Adc> MuxAdc<'a, A> {
     pub const fn new(adc: &'a A) -> MuxAdc<'a, A> {
         MuxAdc {
             adc: adc,
@@ -36,15 +40,10 @@ impl<'a, A: hil::adc::Adc> MuxAdc<'a A> {
         if self.inflight.is_none() {
             let mnode = self.devices.iter().find(|node| node.operation.is_some());
             mnode.map(|node| {
-                let started = node.operation.take().map_or(false, |operation| {
-                    match operation {
-                        Operation::SingleSample => {
-                            self.adc.sample(&node.channel);
-                            true
-                        }
-                        Operation::Idle => {
-                            false
-                        }
+                let started = node.operation.map_or(false, |operation| match operation {
+                    Operation::SingleSample => {
+                        self.adc.sample(&node.channel);
+                        true
                     }
                 });
                 if started {
@@ -60,10 +59,6 @@ impl<'a, A: hil::adc::Adc> MuxAdc<'a A> {
                         Operation::SingleSample => {
                             self.adc.sample(&node.channel);
                         }
-                        Operation::Idle => {
-                            self.adc.stop_sampling();
-                            self.inflight.clear();
-                        }
                     }
                     self.do_next_op();
                 });
@@ -75,7 +70,6 @@ impl<'a, A: hil::adc::Adc> MuxAdc<'a A> {
 #[derive(Copy, Clone, PartialEq)]
 enum Operation {
     SingleSample,
-    Idle,
 }
 
 pub struct AdcUser<'a, A: hil::adc::Adc> {
@@ -116,7 +110,7 @@ impl<A: hil::adc::Adc> hil::adc::AdcChannel for AdcUser<'_, A> {
     }
 
     fn stop_sampling(&self) -> ReturnCode {
-        self.operation.set(Operation::Idle);
+        self.operation.clear();
         self.mux.do_next_op();
         ReturnCode::SUCCESS
     }
@@ -131,5 +125,8 @@ impl<A: hil::adc::Adc> hil::adc::AdcChannel for AdcUser<'_, A> {
 
     fn get_voltage_reference_mv(&self) -> Option<usize> {
         Some(3300)
+    }
+    fn set_client(&self, client: &'static dyn hil::adc::Client) {
+        self.client.set(client);
     }
 }
