@@ -64,6 +64,7 @@ pub mod st7735;
 pub mod temperature;
 pub mod tsl2561;
 pub mod usb;
+pub mod virtual_adc;
 pub mod virtual_alarm;
 pub mod virtual_digest;
 pub mod virtual_flash;
