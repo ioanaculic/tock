@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod adc;
 pub mod alarm;
 pub mod analog_comparator;
 pub mod button;
