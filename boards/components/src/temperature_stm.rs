@@ -8,7 +8,7 @@ use kernel::static_init_half;
 
 #[macro_export]
 macro_rules! temperaturestm_adc_component_helper {
-    ($A:ty, $select: expr, $spi_mux: expr) => {{
+    ($A:ty, $select: expr, $adc_mux: expr) => {{
         use capsules::temperature_stm::TemperatureSTM;
         use capsules::virtual_adc::AdcUser;
         use core::mem::MaybeUninit;
@@ -20,21 +20,25 @@ macro_rules! temperaturestm_adc_component_helper {
     };};
 }
 
-pub struct TemperatureSTMAdcComponent<A: 'static + adc::AdcChannel> {
+pub struct TemperatureSTMComponent<A: 'static + adc::AdcChannel> {
     _select: PhantomData<A>,
+    slope: f32,
+    v_25: f32,
 }
 
-impl<A: 'static + adc::AdcChannel> TemperatureSTMAdcComponent<S> {
-    pub fn new() -> TemperatureSTMAdcComponent<S> {
-        TemperatureSTMAdcComponent {
+impl<A: 'static + adc::AdcChannel> TemperatureSTMComponent<A> {
+    pub fn new(slope: f32, v_25: f32) -> TemperatureSTMComponent<A> {
+        TemperatureSTMComponent {
             _select: PhantomData,
+            slope: slope,
+            v_25: v_25,
         }
     }
 }
 
-impl<A: 'static + adc::AdcChannel> Component for TemperatureSTMAdcComponent<S> {
+impl<A: 'static + adc::AdcChannel> Component for TemperatureSTMComponent<A> {
     type StaticInput = (
-        &'static AdcUser<'static, S>,
+        &'static dyn adc::AdcChannel,
         &'static mut MaybeUninit<TemperatureSTM<'static>>,
     );
     type Output = &'static TemperatureSTM<'static>;
@@ -43,14 +47,9 @@ impl<A: 'static + adc::AdcChannel> Component for TemperatureSTMAdcComponent<S> {
         let temperature_stm = static_init_half!(
             static_buffer.1,
             TemperatureSTM<'static>,
-            TemperatureSTM::new(
-                static_buffer.0,
-                // slope: f32,
-                // v_25: f32
-            );
+            TemperatureSTM::new(static_buffer.0, self.slope, self.v_25)
         );
         static_buffer.0.set_client(temperature_stm);
-        temperature_stm.configure();
 
         temperature_stm
     }

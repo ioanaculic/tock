@@ -1,13 +1,13 @@
 use core::cell::Cell;
-use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::common::cells::OptionalCell;
 use kernel::hil::adc;
 use kernel::hil::sensors;
 use kernel::ReturnCode;
-use kernel::{AppId, Callback, Driver};
 
 use crate::driver;
 pub const DRIVER_NUM: usize = driver::NUM::Temperature as usize;
 
+#[derive(Copy, Clone, PartialEq)]
 pub enum Status {
     Read,
     Idle,
@@ -33,12 +33,13 @@ impl<'a> TemperatureSTM<'a> {
     }
 }
 
-impl adc::Client for TemperatureSTM<'a> {
+impl<'a> adc::Client for TemperatureSTM<'a> {
     fn sample_ready(&self, sample: u16) {
         self.status.set(Status::Idle);
         self.temperature_client.map(|client| {
+            // edit with slope and v_25
             client.callback(
-                ((((1.52 - (sample as f32 * 3.3 / 4095.0)) * 1000.0 / 4.6) + 25.0) * 100.0)
+                ((((self.v_25 - (sample as f32 * 3.3 / 4095.0)) * 1000.0 / self.slope) + 25.0) * 100.0)
                     as usize,
             );
         });
