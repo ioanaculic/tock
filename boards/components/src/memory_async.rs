@@ -9,7 +9,7 @@ use kernel::static_init_half;
 // Setup static space for the objects.
 #[macro_export]
 macro_rules! spi_memory_component_helper {
-    ($S:ty, $select:expr, $spi_mux: expr, $A:ty, $dc:expr, $reset:expr) => {{
+    ($S:ty, $select:expr, $spi_mux: expr) => {{
         use capsules::memory_async::SpiMemory;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;

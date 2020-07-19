@@ -2,6 +2,7 @@ use kernel::common::cells::OptionalCell;
 use kernel::hil::memory_async::{Client, Memory};
 use kernel::hil::spi::{SpiMasterClient, SpiMasterDevice};
 use kernel::ReturnCode;
+use kernel::debug;
 
 pub struct SpiMemory<'a> {
     spi: &'a dyn SpiMasterDevice,
@@ -54,8 +55,10 @@ impl<'a> Memory for SpiMemory<'a> {
 
     fn write(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         if buffer.len() >= len {
+            debug! ("write len {}", len);
             self.spi.read_write_bytes(buffer, None, len)
         } else {
+            panic! ("write error");
             self.client
                 .map(move |client| client.command_complete(buffer, 0));
             ReturnCode::ENOMEM

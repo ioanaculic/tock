@@ -25,11 +25,9 @@
 use capsules::memory_async::SpiMemory;
 use capsules::st7735::ST7735;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use kernel::component::Component;
 use kernel::hil::memory_async::Memory;
-use kernel::hil::spi;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
 use kernel::static_init_half;
@@ -41,6 +39,7 @@ macro_rules! st7735_component_helper {
         use capsules::st7735::ST7735;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;
+        use kernel::hil::spi::{self, SpiMasterDevice};
         use core::mem::MaybeUninit;
         let st7735_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
             components::spi::SpiComponent::new($spi_mux, $select)
@@ -52,7 +51,7 @@ macro_rules! st7735_component_helper {
         );
         let st7735_mem: &'static capsules::memory_async::SpiMemory<'static> =
             components::memory_async::SpiMemoryComponent::new()
-                .finalize(components::spi_memory_component_helper!($spi_mux, $select));
+                .finalize(components::spi_memory_component_helper!($S, $select, $spi_mux));
         static mut st7735_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut st7735: MaybeUninit<ST7735<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
@@ -60,22 +59,20 @@ macro_rules! st7735_component_helper {
     };};
 }
 
-pub struct ST7735Component<S: 'static + spi::SpiMaster, A: 'static + time::Alarm<'static>> {
-    _select: PhantomData<S>,
+pub struct ST7735Component<A: 'static + time::Alarm<'static>> {
     alarm_mux: &'static MuxAlarm<'static, A>,
 }
 
-impl<S: 'static + spi::SpiMaster, A: 'static + time::Alarm<'static>> ST7735Component<S, A> {
-    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> ST7735Component<S, A> {
+impl<A: 'static + time::Alarm<'static>> ST7735Component<A> {
+    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> ST7735Component<A> {
         ST7735Component {
-            _select: PhantomData,
             alarm_mux: alarm_mux,
         }
     }
 }
 
-impl<S: 'static + spi::SpiMaster, A: 'static + time::Alarm<'static>> Component
-    for ST7735Component<S, A>
+impl<A: 'static + time::Alarm<'static>> Component
+    for ST7735Component<A>
 {
     type StaticInput = (
         &'static SpiMemory<'static>,
