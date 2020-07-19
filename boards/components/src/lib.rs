@@ -19,6 +19,7 @@ pub mod l3gd20;
 pub mod led;
 pub mod lldb;
 pub mod lsm303dlhc;
+pub mod memory_async;
 pub mod mlx90614;
 pub mod mx25r6435f;
 pub mod ninedof;

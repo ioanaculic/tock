@@ -26,10 +26,10 @@ use crate::driver;
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::gpio;
+use kernel::hil::memory_async;
 use kernel::hil::screen::{
     self, ScreenClient, ScreenPixelFormat, ScreenRotation, ScreenSetupClient,
 };
-use kernel::hil::spi;
 use kernel::hil::time::{self, Alarm, Frequency};
 use kernel::ReturnCode;
 use kernel::{AppId, Callback, Driver};
@@ -295,7 +295,7 @@ pub enum SendCommand {
 }
 
 pub struct ST7735<'a, A: Alarm<'a>> {
-    spi: &'a dyn spi::SpiMasterDevice,
+    mem: &'a dyn memory_async::Memory,
     alarm: &'a A,
     dc: &'a dyn gpio::Pin,
     reset: &'a dyn gpio::Pin,
@@ -321,24 +321,19 @@ pub struct ST7735<'a, A: Alarm<'a>> {
 
 impl<'a, A: Alarm<'a>> ST7735<'a, A> {
     pub fn new(
-        spi: &'a dyn spi::SpiMasterDevice,
+        mem: &'a dyn memory_async::Memory,
         alarm: &'a A,
         dc: &'a dyn gpio::Pin,
         reset: &'a dyn gpio::Pin,
         buffer: &'static mut [u8],
         sequence_buffer: &'static mut [SendCommand],
     ) -> ST7735<'a, A> {
-        spi.configure(
-            spi::ClockPolarity::IdleLow,
-            spi::ClockPhase::SampleTrailing,
-            4_000_000,
-        );
         ST7735 {
             alarm: alarm,
 
             dc: dc,
             reset: reset,
-            spi: spi,
+            mem: mem,
 
             callback: OptionalCell::empty(),
 
@@ -425,7 +420,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
             || panic!("st7735: send command has no buffer"),
             |buffer| {
                 buffer[0] = cmd.id;
-                self.spi.read_write_bytes(buffer, None, 1);
+                self.mem.write(buffer, 1);
             },
         );
     }
@@ -438,7 +433,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
             || panic!("st7735: send command has no buffer"),
             |buffer| {
                 buffer[0] = cmd.id;
-                self.spi.read_write_bytes(buffer, None, 1);
+                self.mem.write(buffer, 1);
             },
         );
     }
@@ -456,7 +451,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
                         }
                     }
                     self.dc.set();
-                    self.spi.read_write_bytes(buffer, None, len);
+                    self.mem.write(buffer, len);
                 },
             );
         } else {
@@ -470,7 +465,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
             |buffer| {
                 self.status.set(Status::SendParametersSlice);
                 self.dc.set();
-                self.spi.read_write_bytes(buffer, None, len);
+                self.mem.write(buffer, len);
             },
         );
     }
@@ -1022,17 +1017,12 @@ impl<'a, A: Alarm<'a>> time::AlarmClient for ST7735<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> spi::SpiMasterClient for ST7735<'a, A> {
-    fn read_write_done(
-        &self,
-        write_buffer: &'static mut [u8],
-        _read_buffer: Option<&'static mut [u8]>,
-        _len: usize,
-    ) {
+impl<'a, A: Alarm<'a>> memory_async::Client for ST7735<'a, A> {
+    fn command_complete(&self, buffer: &'static mut [u8], _len: usize) {
         if self.status.get() == Status::SendParametersSlice {
-            self.write_buffer.replace(write_buffer);
+            self.write_buffer.replace(buffer);
         } else {
-            self.buffer.replace(write_buffer);
+            self.buffer.replace(buffer);
         }
         self.do_next_op();
     }

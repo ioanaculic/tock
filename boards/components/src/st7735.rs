@@ -22,12 +22,13 @@
 //!     )
 //! );
 //! ```
+use capsules::memory_async::SpiMemory;
 use capsules::st7735::ST7735;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-use capsules::virtual_spi::VirtualSpiMasterDevice;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use kernel::component::Component;
+use kernel::hil::memory_async::Memory;
 use kernel::hil::spi;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
@@ -44,10 +45,18 @@ macro_rules! st7735_component_helper {
         let st7735_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
             components::spi::SpiComponent::new($spi_mux, $select)
                 .finalize(components::spi_component_helper!($S));
+        st7735_spi.configure(
+            spi::ClockPolarity::IdleLow,
+            spi::ClockPhase::SampleTrailing,
+            4_000_000,
+        );
+        let st7735_mem: &'static capsules::memory_async::SpiMemory<'static> =
+            components::memory_async::SpiMemoryComponent::new()
+                .finalize(components::spi_memory_component_helper!($spi_mux, $select));
         static mut st7735_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut st7735: MaybeUninit<ST7735<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
-        (&st7735_spi, &mut st7735_alarm, $dc, $reset, &mut st7735)
+        (&st7735_mem, &mut st7735_alarm, $dc, $reset, &mut st7735)
     };};
 }
 
@@ -69,7 +78,7 @@ impl<S: 'static + spi::SpiMaster, A: 'static + time::Alarm<'static>> Component
     for ST7735Component<S, A>
 {
     type StaticInput = (
-        &'static VirtualSpiMasterDevice<'static, S>,
+        &'static SpiMemory<'static>,
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
         &'static dyn kernel::hil::gpio::Pin,
         &'static dyn kernel::hil::gpio::Pin,
