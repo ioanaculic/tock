@@ -614,16 +614,15 @@ pub unsafe fn reset_handler() {
     let adc_mux = components::adc::AdcMuxComponent::new(&stm32f303xc::adc::ADC1)
         .finalize(components::adc_mux_component_helper!(stm32f303xc::adc::Adc));
 
-    let temp_sensor = components::temperature_stm::TemperatureSTMComponent::new(4.6, 1.52).finalize(
-        components::temperaturestm_adc_component_helper!(
+    let temp_sensor = components::temperature_stm::TemperatureSTMComponent::new(4.6, 1.52)
+        .finalize(components::temperaturestm_adc_component_helper!(
             // spi type
             stm32f303xc::adc::Adc,
             // chip select
             stm32f303xc::adc::Channel::Channel16,
             // spi mux
-            &stm32f303xc::adc::ADC1
-        ),
-    );
+            adc_mux
+        ));
 
     let grant_temperature = board_kernel.create_grant(&grant_cap);
 

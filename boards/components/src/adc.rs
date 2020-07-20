@@ -74,6 +74,8 @@ impl<A: 'static + adc::Adc> Component for AdcComponent<A> {
             AdcUser::new(self.adc_mux, self.channel)
         );
 
+        adc_device.add_to_mux();
+
         adc_device
     }
 }

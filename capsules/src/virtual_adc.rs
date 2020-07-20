@@ -1,5 +1,6 @@
 use kernel::common::cells::OptionalCell;
 use kernel::common::{List, ListLink, ListNode};
+use kernel::debug;
 use kernel::hil;
 use kernel::ReturnCode;
 
@@ -11,6 +12,7 @@ pub struct MuxAdc<'a, A: hil::adc::Adc> {
 
 impl<'a, A: hil::adc::Adc> hil::adc::Client for MuxAdc<'a, A> {
     fn sample_ready(&self, sample: u16) {
+        debug!("sample_ready");
         for node in self.devices.iter() {
             self.inflight.map(|inflight| {
                 if node.channel == inflight.channel {
@@ -82,13 +84,15 @@ pub struct AdcUser<'a, A: hil::adc::Adc> {
 
 impl<'a, A: hil::adc::Adc> AdcUser<'a, A> {
     pub const fn new(mux: &'a MuxAdc<'a, A>, channel: A::Channel) -> AdcUser<'a, A> {
-        AdcUser {
+        let adc_user = AdcUser {
             mux: mux,
             channel: channel,
             operation: OptionalCell::empty(),
             next: ListLink::empty(),
             client: OptionalCell::empty(),
-        }
+        };
+
+        adc_user
     }
 
     pub fn add_to_mux(&'a self) {
@@ -104,6 +108,7 @@ impl<'a, A: hil::adc::Adc> ListNode<'a, AdcUser<'a, A>> for AdcUser<'a, A> {
 
 impl<A: hil::adc::Adc> hil::adc::AdcChannel for AdcUser<'_, A> {
     fn sample(&self) -> ReturnCode {
+        debug!("sample");
         self.operation.set(Operation::SingleSample);
         self.mux.do_next_op();
         ReturnCode::SUCCESS
