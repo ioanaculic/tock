@@ -564,7 +564,6 @@ impl Adc {
         // Check if ADC is ready
         if self.registers.isr.is_set(ISR::ADRDY) {
             // Clear interrupt
-            self.registers.isr.modify(ISR::ADRDY::CLEAR);
             self.registers.ier.modify(IER::ADRDYIE::CLEAR);
             // Set Status
             if self.status.get() == ADCStatus::PoweringOn {
@@ -575,9 +574,9 @@ impl Adc {
         if self.registers.isr.is_set(ISR::EOC) {
             // Clear interrupt
             self.registers.ier.modify(IER::EOCIE::CLEAR);
-            self.registers.isr.modify(ISR::EOC::SET);
             let data = self.registers.dr.read(DR::RDATA);
-            self.client.map(|client| client.sample_ready(data as u16));
+            self.client
+                .map(|client| client.sample_ready(data as u16));
             if self.status.get() == ADCStatus::Continuous {
                 self.registers.ier.modify(IER::EOCIE::SET);
             }
@@ -654,8 +653,7 @@ impl hil::adc::Adc for Adc {
             self.registers.smpr2.modify(SMPR2::SMP16.val(0b100));
             self.registers.sqr1.modify(SQR1::L.val(0b0000));
             self.registers.sqr1.modify(SQR1::SQ1.val(*channel as u32));
-            self.registers.ier.modify(IER::EOCIE::SET);
-            self.registers.ier.modify(IER::EOSIE::SET);
+            self.registers.ier.modify(IER::EOSMPIE::SET);
             self.registers.cr.modify(CR::ADSTART::SET);
             ReturnCode::SUCCESS
         } else {
