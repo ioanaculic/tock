@@ -18,6 +18,7 @@ pub mod isl29035;
 pub mod l3gd20;
 pub mod led;
 pub mod lldb;
+pub mod ls016b8uy;
 pub mod lsm303dlhc;
 pub mod memory_async;
 pub mod mlx90614;

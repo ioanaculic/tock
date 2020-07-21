@@ -1,10 +1,10 @@
-//! ST7735 SPI Screen
+//! LS016B8UY SPI Screen
 //!
 //! Usage
 //! -----
 //!
 //! ```rust
-//! let tft = components::st7735::ST7735Component::new(alarm_mux).finalize(
+//! let tft = components::ls016b8uy::ST7735Component::new(alarm_mux).finalize(
 //!     components::st7735_component_helper!(
 //!         // spi type
 //!         stm32f4xx::spi::Spi,
@@ -22,9 +22,9 @@
 //! );
 //! ```
 
-use crate::driver;
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::debug;
 use kernel::hil::gpio;
 use kernel::hil::memory_async;
 use kernel::hil::screen::{
@@ -34,13 +34,10 @@ use kernel::hil::time::{self, Alarm, Frequency};
 use kernel::ReturnCode;
 use kernel::{AppId, Callback, Driver};
 
-/// Syscall driver number.
-pub const DRIVER_NUM: usize = driver::NUM::St7735 as usize;
-
 const BUFFER_SIZE: usize = 24;
 pub static mut BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Command {
     id: u8,
     parameters: Option<&'static [u8]>,
@@ -53,193 +50,171 @@ static NOP: Command = Command {
     delay: 0,
 };
 
-static SWRESET: Command = Command {
-    id: 0x01,
+static SLEEP_IN: Command = Command {
+    id: 0x10,
+    parameters: None,
+    delay: 0,
+};
+
+static SLEEP_OUT: Command = Command {
+    id: 0x11,
     parameters: None,
     delay: 150,
 };
 
-#[allow(dead_code)]
-static SLPIN: Command = Command {
-    id: 0x10,
-    parameters: None,
-    delay: 255,
-};
-
-static SLPOUT: Command = Command {
-    id: 0x11,
-    parameters: None,
-    delay: 255,
-};
-
-#[allow(dead_code)]
-static PLTON: Command = Command {
-    id: 0x12,
-    parameters: None,
-    delay: 0,
-};
-
-static NORON: Command = Command {
-    id: 0x13,
-    parameters: None,
-    delay: 10,
-};
-
-static INVON: Command = Command {
-    id: 0x21,
-    parameters: None,
-    delay: 0,
-};
-
-static INVOFF: Command = Command {
-    id: 0x20,
-    parameters: None,
-    delay: 0,
-};
-
-#[allow(dead_code)]
-static GAMSET: Command = Command {
-    id: 0x26,
-    /// Default parameters: Gama Set
-    parameters: Some(&[0]),
-    delay: 0,
-};
-
-static DISPON: Command = Command {
-    id: 0x29,
-    /// Default Parameters: GamaSet
-    parameters: None,
-    delay: 100,
-};
-
-static DISPOFF: Command = Command {
+static DISPLAY_OFF: Command = Command {
     id: 0x28,
     parameters: None,
-    delay: 100,
+    delay: 0,
+};
+
+static DISPLAY_ON: Command = Command {
+    id: 0x29,
+    parameters: None,
+    delay: 20,
+};
+
+static WRITE_RAM: Command = Command {
+    id: 0x2C,
+    parameters: None,
+    delay: 0,
+};
+
+static READ_RAM: Command = Command {
+    id: 0x2E,
+    parameters: None,
+    delay: 0,
 };
 
 static CASET: Command = Command {
     id: 0x2A,
-    /// Default Parameters: XS[15:8], XS[7:0], XE[15:8], XE[7,0] (128x160)
-    parameters: Some(&[0, 0, 0, 0x7F]),
+    parameters: Some(&[0x00, 0x1E, 0x00, 0xD1]),
     delay: 0,
 };
 
 static RASET: Command = Command {
     id: 0x2B,
-    /// Default Parameters: YS[15:8], YS[7:0], YE[15:8], YE[7,0] (128x160)
-    parameters: Some(&[0, 0, 0, 0x9F]),
+    parameters: Some(&[0x00, 0x00, 0x00, 0xB3]),
     delay: 0,
 };
 
-static RAMWR: Command = Command {
-    id: 0x2C,
-    /// Default Parameters: data to write
-    parameters: Some(&[]),
-    delay: 0,
-};
-
-static FRMCTR1: Command = Command {
-    id: 0xB1,
-    /// Default Parameters:
-    parameters: Some(&[0x01, 0x2C, 0x2D]),
-    delay: 0,
-};
-
-static FRMCTR2: Command = Command {
-    id: 0xB2,
-    /// Default Parameters:
-    parameters: Some(&[0x01, 0x2C, 0x2D]),
-    delay: 0,
-};
-
-static FRMCTR3: Command = Command {
-    id: 0xB3,
-    /// Default Parameters:
-    parameters: Some(&[0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D]),
-    delay: 0,
-};
-
-static INVCTR: Command = Command {
-    id: 0xB4,
-    /// Default Parameters:
-    parameters: Some(&[0x07]),
-    delay: 0,
-};
-
-static PWCTR1: Command = Command {
-    id: 0xC0,
-    /// Default Parameters:
-    parameters: Some(&[0xA2, 0x02, 0x84]),
-    delay: 0,
-};
-
-static PWCTR2: Command = Command {
-    id: 0xC1,
-    /// Default Parameters:
-    parameters: Some(&[0xC5]),
-    delay: 0,
-};
-
-static PWCTR3: Command = Command {
-    id: 0xC2,
-    /// Default Parameters:
-    parameters: Some(&[0x0A, 0x00]),
-    delay: 0,
-};
-
-static PWCTR4: Command = Command {
-    id: 0xC3,
-    /// Default Parameters:
-    parameters: Some(&[0x8A, 0x2A]),
-    delay: 0,
-};
-
-static PWCTR5: Command = Command {
-    id: 0xC4,
-    /// Default Parameters:
-    parameters: Some(&[0x8A, 0xEE]),
-    delay: 0,
-};
-
-static VMCTR1: Command = Command {
-    id: 0xC5,
-    /// Default Parameters:
-    parameters: Some(&[0x0E]),
-    delay: 0,
-};
-
-static MADCTL: Command = Command {
-    id: 0x36,
-    /// Default Parameters:
+static VSYNC_OUTPUT: Command = Command {
+    id: 0x35,
     parameters: Some(&[0x00]),
     delay: 0,
 };
 
-static COLMOD: Command = Command {
+static NORMAL_DISPLAY: Command = Command {
+    id: 0x36,
+    parameters: Some(&[0x83]),
+    delay: 0,
+};
+
+static IDLE_OFF: Command = Command {
+    id: 0x38,
+    parameters: None,
+    delay: 20,
+};
+
+static IDLE_ON: Command = Command {
+    id: 0x39,
+    parameters: None,
+    delay: 0,
+};
+
+static COLOR_MODE: Command = Command {
     id: 0x3A,
-    /// Default Parameters:
-    parameters: Some(&[0x05]),
+    parameters: Some(&[0x55]),
     delay: 0,
 };
 
-static GMCTRP1: Command = Command {
-    id: 0xE0,
-    /// Default Parameters:
-    parameters: Some(&[
-        0x02, 0x1c, 0x07, 0x12, 0x37, 0x32, 0x29, 0x2d, 0x29, 0x25, 0x2B, 0x39, 0x00, 0x01, 0x03,
-        0x10,
-    ]),
+static PANEL_SETTING1: Command = Command {
+    id: 0xB0,
+    parameters: Some(&[0x01, 0xFE]),
     delay: 0,
 };
 
-static GMCTRN1: Command = Command {
-    id: 0xE1,
-    /// Default Parameters:
-    parameters: Some(&[
-        0x03, 0x1d, 0x07, 0x06, 0x2E, 0x2C, 0x29, 0x2D, 0x2E, 0x2E, 0x37, 0x3F, 0x00, 0x00, 0x02,
-        0x10,
-    ]),
+static PANEL_SETTING2: Command = Command {
+    id: 0xB1,
+    parameters: Some(&[0xDE, 0x21]),
+    delay: 0,
+};
+
+static OSCILLATOR: Command = Command {
+    id: 0xB3,
+    parameters: Some(&[0x02]),
+    delay: 0,
+};
+
+static PANEL_SETTING_LOCK: Command = Command {
+    id: 0xB4,
+    parameters: None,
+    delay: 0,
+};
+
+static PANEL_V_PORCH: Command = Command {
+    id: 0xB7,
+    parameters: Some(&[0x05, 0x33]),
+    delay: 0,
+};
+
+static PANEL_IDLE_V_PORCH: Command = Command {
+    id: 0xB8,
+    parameters: Some(&[0x05, 0x33]),
+    delay: 0,
+};
+
+static GVDD: Command = Command {
+    id: 0xC0,
+    parameters: Some(&[0x53]),
+    delay: 0,
+};
+
+static OPAMP: Command = Command {
+    id: 0xC2,
+    parameters: Some(&[0x03, 0x12]),
+    delay: 0,
+};
+
+static RELOAD_MTP_VCOMH: Command = Command {
+    id: 0xC5,
+    parameters: Some(&[0x00, 0x45]),
+    delay: 0,
+};
+
+static PANEL_TIMING1: Command = Command {
+    id: 0xC8,
+    parameters: Some(&[0x04, 0x03]),
+    delay: 0,
+};
+
+static PANEL_TIMING2: Command = Command {
+    id: 0xC9,
+    parameters: Some(&[0x5E, 0x08]),
+    delay: 0,
+};
+
+static PANEL_TIMING3: Command = Command {
+    id: 0xCA,
+    parameters: Some(&[0x0A, 0x0C, 0x02]),
+    delay: 0,
+};
+
+static PANEL_TIMING4: Command = Command {
+    id: 0xCC,
+    parameters: Some(&[0x03, 0x04]),
+    delay: 0,
+};
+
+static PANEL_POWER: Command = Command {
+    id: 0xD0,
+    parameters: Some(&[0x0C]),
+    delay: 0,
+};
+
+static TEARING_EFFECT: Command = Command {
+    id: 0xDD,
+    parameters: Some(&[0x00]),
     delay: 0,
 };
 
@@ -251,15 +226,36 @@ macro_rules! default_parameters_sequence {
     }
 }
 
-static INIT_SEQUENCE: [SendCommand; 20] = default_parameters_sequence!(
-    &SWRESET, &SLPOUT, &FRMCTR1, &FRMCTR2, &FRMCTR3, &INVCTR, &PWCTR1, &PWCTR2, &PWCTR3, &PWCTR4,
-    &PWCTR5, &VMCTR1, &INVOFF, &MADCTL, &COLMOD, &CASET, &RASET, &GMCTRP1, &GMCTRN1, &NORON
+static INIT_SEQUENCE: [SendCommand; 9] = default_parameters_sequence!(
+    &VSYNC_OUTPUT,
+    &COLOR_MODE,
+    // &PANEL_SETTING1,
+    // &PANEL_SETTING2,
+    // &PANEL_V_PORCH,
+    // &PANEL_IDLE_V_PORCH,
+    // &PANEL_TIMING1,
+    // &PANEL_TIMING2,
+    // &PANEL_TIMING3,
+    // &PANEL_TIMING4,
+    // &PANEL_POWER,
+    // &OSCILLATOR,
+    &GVDD,
+    // &RELOAD_MTP_VCOMH,
+    // &OPAMP,
+    // &TEARING_EFFECT,
+    // &PANEL_SETTING_LOCK,
+    &SLEEP_OUT,
+    &NORMAL_DISPLAY,
+    &CASET,
+    &RASET,
+    &DISPLAY_ON,
+    &IDLE_OFF
 );
 
 static WRITE_PIXEL: [SendCommand; 3] = [
     SendCommand::Position(&CASET, 1, 4),
     SendCommand::Position(&RASET, 5, 4),
-    SendCommand::Position(&RAMWR, 9, 2),
+    SendCommand::Position(&WRITE_RAM, 9, 2),
 ];
 
 const SEQUENCE_BUFFER_SIZE: usize = 24;
@@ -279,7 +275,7 @@ enum Status {
     SendParametersSlice,
     Delay,
 }
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SendCommand {
     Nop,
     Default(&'static Command),
@@ -294,10 +290,9 @@ pub enum SendCommand {
     Slice(&'static Command, usize),
 }
 
-pub struct ST7735<'a, A: Alarm<'a>> {
+pub struct LS016B8UY<'a, A: Alarm<'a>> {
     mem: &'a dyn memory_async::Memory,
     alarm: &'a A,
-    dc: &'a dyn gpio::Pin,
     reset: &'a dyn gpio::Pin,
     status: Cell<Status>,
     callback: OptionalCell<Callback>,
@@ -319,29 +314,26 @@ pub struct ST7735<'a, A: Alarm<'a>> {
     write_buffer: TakeCell<'static, [u8]>,
 }
 
-impl<'a, A: Alarm<'a>> ST7735<'a, A> {
+impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
     pub fn new(
         mem: &'a dyn memory_async::Memory,
         alarm: &'a A,
-        dc: &'a dyn gpio::Pin,
         reset: &'a dyn gpio::Pin,
         buffer: &'static mut [u8],
         sequence_buffer: &'static mut [SendCommand],
-    ) -> ST7735<'a, A> {
-        dc.make_output();
+    ) -> LS016B8UY<'a, A> {
         reset.make_output();
-        ST7735 {
+        LS016B8UY {
             alarm: alarm,
 
-            dc: dc,
             reset: reset,
             mem: mem,
 
             callback: OptionalCell::empty(),
 
             status: Cell::new(Status::Idle),
-            width: Cell::new(128),
-            height: Cell::new(160),
+            width: Cell::new(240),
+            height: Cell::new(240),
 
             client: OptionalCell::empty(),
             setup_client: OptionalCell::empty(),
@@ -362,7 +354,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
     fn send_sequence(&self, sequence: CommandSequence) -> ReturnCode {
         if self.status.get() == Status::Idle {
             let error = self.sequence_buffer.map_or_else(
-                || panic!("st7735: send sequence has no sequence buffer"),
+                || panic!("ls016b8uy: send sequence has no sequence buffer"),
                 |sequence_buffer| {
                     if sequence.len() <= sequence_buffer.len() {
                         self.sequence_len.set(sequence.len());
@@ -400,42 +392,41 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
     fn send_command_with_default_parameters(&self, cmd: &'static Command) {
         let mut len = 0;
         self.buffer.map_or_else(
-            || panic!("st7735: send parameters has no buffer"),
+            || panic!("ls016b8uy: send parameters has no buffer"),
             |buffer| {
-                buffer[0] = cmd.id;
+                // buffer[0] = cmd.id;
+                debug!("{} {:?}", cmd.id, cmd.parameters);
                 if let Some(parameters) = cmd.parameters {
                     for parameter in parameters.iter() {
-                        buffer[len + 1] = *parameter;
+                        buffer[len] = *parameter;
                         len = len + 1;
                     }
                 }
             },
         );
-        self.send_command(cmd, 1, len, 1);
+        self.send_command(cmd, 0, len, 1);
     }
 
     fn send_command(&self, cmd: &'static Command, position: usize, len: usize, repeat: usize) {
         self.command.set(cmd);
         self.status.set(Status::SendCommand(position, len, repeat));
-        self.dc.clear();
         self.buffer.take().map_or_else(
-            || panic!("st7735: send command has no buffer"),
+            || panic!("ls016b8uy: send command has no buffer"),
             |buffer| {
-                buffer[0] = cmd.id;
-                self.mem.write(buffer, 1);
+                // buffer[0] = cmd.id;
+                self.mem.write_addr_8(cmd.id, buffer, len);
             },
         );
     }
 
     fn send_command_slice(&self, cmd: &'static Command, len: usize) {
         self.command.set(cmd);
-        self.dc.clear();
         self.status.set(Status::SendCommandSlice(len));
         self.buffer.take().map_or_else(
-            || panic!("st7735: send command has no buffer"),
+            || panic!("ls016b8uy: send command has no buffer"),
             |buffer| {
-                buffer[0] = cmd.id;
-                self.mem.write(buffer, 1);
+                // buffer[0] = cmd.id;
+                self.mem.write_addr_8(cmd.id, buffer, 0);
             },
         );
     }
@@ -444,7 +435,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
         self.status.set(Status::SendCommand(0, len, repeat - 1));
         if len > 0 {
             self.buffer.take().map_or_else(
-                || panic!("st7735: send parameters has no buffer"),
+                || panic!("ls016b8uy: send parameters has no buffer"),
                 |buffer| {
                     // shift parameters
                     if position > 0 {
@@ -452,7 +443,6 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
                             buffer[i - position] = buffer[i];
                         }
                     }
-                    self.dc.set();
                     self.mem.write(buffer, len);
                 },
             );
@@ -463,10 +453,9 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
 
     fn send_parameters_slice(&self, len: usize) {
         self.write_buffer.take().map_or_else(
-            || panic!("st7735: no write buffer"),
+            || panic!("ls016b8uy: no write buffer"),
             |buffer| {
                 self.status.set(Status::SendParametersSlice);
-                self.dc.set();
                 self.mem.write(buffer, len);
             },
         );
@@ -476,17 +465,17 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
         if self.status.get() == Status::Idle {
             // TODO check if buffer is available
             self.sequence_buffer.map_or_else(
-                || panic!("st7735: fill has no sequence buffer"),
+                || panic!("ls016b8uy: fill has no sequence buffer"),
                 |sequence| {
                     sequence[0] = SendCommand::Default(&CASET);
                     sequence[1] = SendCommand::Default(&RASET);
                     self.buffer.map_or_else(
-                        || panic!("st7735: fill has no buffer"),
+                        || panic!("ls016b8uy: fill has no buffer"),
                         |buffer| {
                             let bytes = 128 * 160 * 2;
                             let buffer_space = (buffer.len() - 9) / 2 * 2;
                             let repeat = (bytes / buffer_space) + 1;
-                            sequence[2] = SendCommand::Repeat(&RAMWR, 9, buffer_space, repeat);
+                            sequence[2] = SendCommand::Repeat(&WRITE_RAM, 9, buffer_space, repeat);
                             for index in 0..(buffer_space / 2) {
                                 buffer[9 + 2 * index] = ((color >> 8) & 0xFF) as u8;
                                 buffer[9 + (2 * index + 1)] = color as u8;
@@ -504,35 +493,40 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
     }
 
     fn rotation(&self, rotation: ScreenRotation) -> ReturnCode {
-        if self.status.get() == Status::Idle {
-            let rotation_bits = match rotation {
-                ScreenRotation::Normal => 0x00,
-                ScreenRotation::Rotated90 => 0x60,
-                ScreenRotation::Rotated180 => 0xC0,
-                ScreenRotation::Rotated270 => 0xA0,
-            };
-            match rotation {
-                ScreenRotation::Normal | ScreenRotation::Rotated180 => {
-                    self.width.set(128);
-                    self.height.set(160);
-                }
-                ScreenRotation::Rotated90 | ScreenRotation::Rotated270 => {
-                    self.width.set(160);
-                    self.height.set(128);
-                }
-            };
-            self.buffer.map_or_else(
-                || panic!("st7735: set rotation has no buffer"),
-                |buffer| {
-                    buffer[1] =
-                        rotation_bits | MADCTL.parameters.map_or(0, |parameters| parameters[0])
-                },
-            );
-            self.setup_command.set(true);
-            self.send_command(&MADCTL, 1, 1, 1);
-            ReturnCode::SUCCESS
-        } else {
-            ReturnCode::EBUSY
+        // if self.status.get() == Status::Idle {
+        //     let rotation_bits = match rotation {
+        //         ScreenRotation::Normal => 0x00,
+        //         ScreenRotation::Rotated90 => 0x60,
+        //         ScreenRotation::Rotated180 => 0xC0,
+        //         ScreenRotation::Rotated270 => 0xA0,
+        //     };
+        //     match rotation {
+        //         ScreenRotation::Normal | ScreenRotation::Rotated180 => {
+        //             self.width.set(128);
+        //             self.height.set(160);
+        //         }
+        //         ScreenRotation::Rotated90 | ScreenRotation::Rotated270 => {
+        //             self.width.set(160);
+        //             self.height.set(128);
+        //         }
+        //     };
+        //     self.buffer.map_or_else(
+        //         || panic!("ls016b8uy: set rotation has no buffer"),
+        //         |buffer| {
+        //             buffer[1] =
+        //                 rotation_bits | MADCTL.parameters.map_or(0, |parameters| parameters[0])
+        //         },
+        //     );
+        //     self.setup_command.set(true);
+        //     self.send_command(&MADCTL, 1, 1, 1);
+        //     ReturnCode::SUCCESS
+        // } else {
+        //     ReturnCode::EBUSY
+        // }
+        self.send_command_with_default_parameters(&NOP);
+        match rotation {
+            ScreenRotation::Normal => ReturnCode::SUCCESS,
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
@@ -542,7 +536,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
                 ReturnCode::EOFF
             } else {
                 self.setup_command.set(false);
-                self.send_command_with_default_parameters(&DISPON);
+                self.send_command_with_default_parameters(&DISPLAY_ON);
                 ReturnCode::SUCCESS
             }
         } else {
@@ -556,7 +550,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
                 ReturnCode::EOFF
             } else {
                 self.setup_command.set(false);
-                self.send_command_with_default_parameters(&DISPOFF);
+                self.send_command_with_default_parameters(&DISPLAY_OFF);
                 ReturnCode::SUCCESS
             }
         } else {
@@ -565,44 +559,48 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
     }
 
     fn display_invert_on(&self) -> ReturnCode {
-        if self.status.get() == Status::Idle {
-            if !self.power_on.get() {
-                ReturnCode::EOFF
-            } else {
-                self.setup_command.set(false);
-                self.send_command_with_default_parameters(&INVON);
-                ReturnCode::SUCCESS
-            }
-        } else {
-            ReturnCode::EBUSY
-        }
+        // if self.status.get() == Status::Idle {
+        //     if !self.power_on.get() {
+        //         ReturnCode::EOFF
+        //     } else {
+        //         self.setup_command.set(false);
+        //         self.send_command_with_default_parameters(&INVON);
+        //         ReturnCode::SUCCESS
+        //     }
+        // } else {
+        //     ReturnCode::EBUSY
+        // }
+        ReturnCode::ENOSUPPORT
     }
 
     fn display_invert_off(&self) -> ReturnCode {
-        if self.status.get() == Status::Idle {
-            if !self.power_on.get() {
-                ReturnCode::EOFF
-            } else {
-                self.setup_command.set(false);
-                self.send_command_with_default_parameters(&INVOFF);
-                ReturnCode::SUCCESS
-            }
-        } else {
-            ReturnCode::EBUSY
-        }
+        // if self.status.get() == Status::Idle {
+        //     if !self.power_on.get() {
+        //         ReturnCode::EOFF
+        //     } else {
+        //         self.setup_command.set(false);
+        //         self.send_command_with_default_parameters(&INVOFF);
+        //         ReturnCode::SUCCESS
+        //     }
+        // } else {
+        //     ReturnCode::EBUSY
+        // }
+        ReturnCode::ENOSUPPORT
     }
 
     fn do_next_op(&self) {
         match self.status.get() {
             Status::Delay => {
                 self.sequence_buffer.map_or_else(
-                    || panic!("st7735: do next op has no sequence buffer"),
+                    || panic!("ls016b8uy: do next op has no sequence buffer"),
                     |sequence| {
+                        debug!("enter sequence");
                         // sendf next command in the sequence
                         let position = self.position_in_sequence.get();
                         self.position_in_sequence
                             .set(self.position_in_sequence.get() + 1);
                         if position < self.sequence_len.get() {
+                            debug!("{:?}", sequence[position]);
                             match sequence[position] {
                                 SendCommand::Nop => {
                                     self.do_next_op();
@@ -649,12 +647,12 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
                                 }
                             }
                         }
+                        debug!("exit sequence");
                     },
                 );
             }
             Status::SendCommand(parameters_position, parameters_length, repeat) => {
                 if repeat == 0 {
-                    self.dc.clear();
                     let mut delay = self.command.get().delay as u32;
                     if delay > 0 {
                         if delay == 255 {
@@ -673,7 +671,6 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
                 self.send_parameters_slice(len);
             }
             Status::SendParametersSlice => {
-                self.dc.clear();
                 let mut delay = self.command.get().delay as u32;
                 if delay > 0 {
                     if delay == 255 {
@@ -687,26 +684,27 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
             }
             Status::Reset1 => {
                 self.send_command_with_default_parameters(&NOP);
-                self.set_delay(10, Status::Reset2);
+                self.reset.clear();
+                self.set_delay(5, Status::Reset2);
             }
             Status::Reset2 => {
                 self.reset.set();
-                self.set_delay(120, Status::Reset3);
+                self.set_delay(10, Status::Reset3);
             }
             Status::Reset3 => {
                 self.reset.clear();
-                self.set_delay(120, Status::Reset4);
+                self.set_delay(20, Status::Reset4);
             }
             Status::Reset4 => {
                 self.reset.set();
-                self.set_delay(120, Status::Init);
+                self.set_delay(10, Status::Init);
             }
             Status::Init => {
                 self.status.set(Status::Idle);
                 self.send_sequence(&INIT_SEQUENCE);
             }
             _ => {
-                panic!("ST7735 status Idle");
+                panic!("LS016B8UY status Idle");
             }
         };
     }
@@ -728,7 +726,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
         {
             if self.status.get() == Status::Idle {
                 self.buffer.map_or_else(
-                    || panic!("st7735: set memory frame has no buffer"),
+                    || panic!("ls016b8uy: set memory frame has no buffer"),
                     |buffer| {
                         // CASET
                         buffer[position] = 0;
@@ -770,7 +768,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
         if x < self.width.get() && y < self.height.get() {
             if self.status.get() == Status::Idle {
                 self.buffer.map_or_else(
-                    || panic!("st7735: write pixel has no buffer"),
+                    || panic!("ls016b8uy: write pixel has no buffer"),
                     |buffer| {
                         // CASET
                         buffer[1] = 0;
@@ -824,7 +822,7 @@ impl<'a, A: Alarm<'a>> ST7735<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> Driver for ST7735<'a, A> {
+impl<'a, A: Alarm<'a>> Driver for LS016B8UY<'a, A> {
     fn command(&self, command_num: usize, data1: usize, data2: usize, _: AppId) -> ReturnCode {
         match command_num {
             0 => ReturnCode::SUCCESS,
@@ -856,7 +854,7 @@ impl<'a, A: Alarm<'a>> Driver for ST7735<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> screen::ScreenSetup for ST7735<'a, A> {
+impl<'a, A: Alarm<'a>> screen::ScreenSetup for LS016B8UY<'a, A> {
     fn set_client(&self, setup_client: Option<&'static dyn ScreenSetupClient>) {
         if let Some(setup_client) = setup_client {
             self.setup_client.set(setup_client);
@@ -918,7 +916,7 @@ impl<'a, A: Alarm<'a>> screen::ScreenSetup for ST7735<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> screen::Screen for ST7735<'a, A> {
+impl<'a, A: Alarm<'a>> screen::Screen for LS016B8UY<'a, A> {
     fn get_resolution(&self) -> (usize, usize) {
         (self.width.get(), self.height.get())
     }
@@ -935,7 +933,7 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST7735<'a, A> {
         if self.status.get() == Status::Idle {
             self.setup_command.set(false);
             let buffer_len = self.buffer.map_or_else(
-                || panic!("st7735: buffer is not available"),
+                || panic!("ls016b8uy: buffer is not available"),
                 |buffer| buffer.len() - 1,
             );
             if buffer_len >= 9 {
@@ -943,7 +941,7 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST7735<'a, A> {
                 let err = self.set_memory_frame(1, x, y, x + width, y + height);
                 if err == ReturnCode::SUCCESS {
                     self.sequence_buffer.map_or_else(
-                        || panic!("st7735: write no sequence buffer"),
+                        || panic!("ls016b8uy: write no sequence buffer"),
                         |sequence| {
                             sequence[0] = SendCommand::Position(&CASET, 1, 4);
                             sequence[1] = SendCommand::Position(&RASET, 5, 4);
@@ -966,15 +964,15 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST7735<'a, A> {
             self.setup_command.set(false);
             self.write_buffer.replace(buffer);
             let buffer_len = self.buffer.map_or_else(
-                || panic!("st7735: buffer is not available"),
+                || panic!("ls016b8uy: buffer is not available"),
                 |buffer| buffer.len(),
             );
             if buffer_len > 0 {
                 // set buffer
                 self.sequence_buffer.map_or_else(
-                    || panic!("st7735: write no sequence buffer"),
+                    || panic!("ls016b8uy: write no sequence buffer"),
                     |sequence| {
-                        sequence[0] = SendCommand::Slice(&RAMWR, len);
+                        sequence[0] = SendCommand::Slice(&WRITE_RAM, len);
                         self.sequence_len.set(1);
                     },
                 );
@@ -1013,19 +1011,20 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST7735<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> time::AlarmClient for ST7735<'a, A> {
+impl<'a, A: Alarm<'a>> time::AlarmClient for LS016B8UY<'a, A> {
     fn fired(&self) {
         self.do_next_op();
     }
 }
 
-impl<'a, A: Alarm<'a>> memory_async::Client for ST7735<'a, A> {
+impl<'a, A: Alarm<'a>> memory_async::Client for LS016B8UY<'a, A> {
     fn command_complete(&self, buffer: &'static mut [u8], _len: usize) {
         if self.status.get() == Status::SendParametersSlice {
             self.write_buffer.replace(buffer);
         } else {
             self.buffer.replace(buffer);
         }
+        debug!("do next op");
         self.do_next_op();
     }
 }

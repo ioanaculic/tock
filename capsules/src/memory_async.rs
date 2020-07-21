@@ -89,6 +89,7 @@ impl<'a> SpiMasterClient for SpiMemory<'a> {
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
     ) {
+        debug! ("write done {}", len);
         let mut buffer = write_buffer;
         if let Some(buf) = read_buffer {
             self.read_write_buffer.replace(buffer);
