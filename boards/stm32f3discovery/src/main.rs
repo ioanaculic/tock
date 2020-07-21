@@ -631,7 +631,6 @@ pub unsafe fn reset_handler() {
         capsules::temperature::TemperatureSensor::new(temp_sensor, grant_temperature)
     );
     kernel::hil::sensors::TemperatureDriver::set_client(temp_sensor, temp);
-    // stm32f303xc::adc::ADC1.set_client(adc);
 
     let stm32f3discovery = STM32F3Discovery {
         console: console,

@@ -503,6 +503,8 @@ pub struct Adc {
     clock: AdcClock,
     status: Cell<ADCStatus>,
     client: OptionalCell<&'static dyn hil::adc::Client>,
+    requested: Cell<ADCStatus>,
+    requeste_channel: Cell<u32>
 }
 
 pub static mut ADC1: Adc = Adc::new();
@@ -515,8 +517,14 @@ impl Adc {
             clock: AdcClock(rcc::PeripheralClock::AHB(rcc::HCLK::ADC1)),
             status: Cell::new(ADCStatus::Off),
             client: OptionalCell::empty(),
+            requested: Cell::new(ADCStatus::Idle),
+            requeste_channel: Cell::new(0),
         }
     }
+
+    pub fn enable_temperature(&self) {
+        self.common_registers.ccr.modify(CCR::TSEN::SET);
+    } 
 
     pub fn enable(&self) {
         self.status.set(ADCStatus::PoweringOn);
@@ -568,6 +576,14 @@ impl Adc {
             // Set Status
             if self.status.get() == ADCStatus::PoweringOn {
                 self.status.set(ADCStatus::Idle);
+                match self.requested.get() {
+                    ADCStatus::OneSample => {
+                        // self.registers.isr.modify(ISR::EOS::SET);
+                        self.sample_u32(self.requeste_channel.get());
+                        return;
+                    }
+                    _ => {}
+                }
             }
         }
         // Check if regular group conversion ended
@@ -575,8 +591,7 @@ impl Adc {
             // Clear interrupt
             self.registers.ier.modify(IER::EOCIE::CLEAR);
             let data = self.registers.dr.read(DR::RDATA);
-            self.client
-                .map(|client| client.sample_ready(data as u16));
+            self.client.map(|client| client.sample_ready(data as u16));
             if self.status.get() == ADCStatus::Continuous {
                 self.registers.ier.modify(IER::EOCIE::SET);
             }
@@ -618,6 +633,32 @@ impl Adc {
     pub fn disable_clock(&self) {
         self.clock.disable();
     }
+
+    fn enable_special_channels(&self) {
+        // enabling temperature channel
+        if self.requeste_channel.get() == 16 {
+            self.enable_temperature();
+        }
+    }
+
+    fn sample_u32(&self, channel: u32) -> ReturnCode {
+        self.enable_special_channels();
+        if self.status.get() == ADCStatus::Idle {
+            self.requested.set(ADCStatus::Idle);
+            self.status.set(ADCStatus::OneSample);
+            self.registers.smpr2.modify(SMPR2::SMP16.val(0b100));
+            self.registers.sqr1.modify(SQR1::L.val(0b0000));
+            self.registers.sqr1.modify(SQR1::SQ1.val(channel));
+            self.registers.ier.modify(IER::EOSIE::SET);
+            self.registers.ier.modify(IER::EOCIE::SET);
+            self.registers.ier.modify(IER::EOSMPIE::SET);
+            self.registers.cr.modify(CR::ADSTART::SET);
+            ReturnCode::SUCCESS
+        } else {
+            ReturnCode::EBUSY
+        }
+    }
+
 }
 
 struct AdcClock(rcc::PeripheralClock);
@@ -641,19 +682,12 @@ impl hil::adc::Adc for Adc {
 
     fn sample(&self, channel: &Self::Channel) -> ReturnCode {
         if self.status.get() == ADCStatus::Off {
+            self.requested.set(ADCStatus::OneSample);
+            self.requeste_channel.set(*channel as u32);
             self.enable();
-        }
-
-        if self.status.get() == ADCStatus::Idle {
-            self.status.set(ADCStatus::OneSample);
-            self.registers.smpr2.modify(SMPR2::SMP16.val(0b100));
-            self.registers.sqr1.modify(SQR1::L.val(0b0000));
-            self.registers.sqr1.modify(SQR1::SQ1.val(*channel as u32));
-            self.registers.ier.modify(IER::EOSMPIE::SET);
-            self.registers.cr.modify(CR::ADSTART::SET);
             ReturnCode::SUCCESS
         } else {
-            ReturnCode::EBUSY
+            self.sample_u32(*channel as u32)
         }
     }
 

@@ -37,10 +37,9 @@ impl<'a> adc::Client for TemperatureSTM<'a> {
     fn sample_ready(&self, sample: u16) {
         self.status.set(Status::Idle);
         self.temperature_client.map(|client| {
-            // edit with slope and v_25
             client.callback(
-                ((((self.v_25 - (sample as f32 * 3.3 / 4095.0)) * 1000.0 / self.slope) + 25.0) * 100.0)
-                    as usize,
+                ((((self.v_25 - (sample as f32 * 3.3 / 4095.0)) * 1000.0 / self.slope) + 25.0)
+                    * 100.0) as usize,
             );
         });
     }
