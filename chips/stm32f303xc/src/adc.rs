@@ -504,7 +504,7 @@ pub struct Adc {
     status: Cell<ADCStatus>,
     client: OptionalCell<&'static dyn hil::adc::Client>,
     requested: Cell<ADCStatus>,
-    requeste_channel: Cell<u32>
+    requeste_channel: Cell<u32>,
 }
 
 pub static mut ADC1: Adc = Adc::new();
@@ -524,7 +524,7 @@ impl Adc {
 
     pub fn enable_temperature(&self) {
         self.common_registers.ccr.modify(CCR::TSEN::SET);
-    } 
+    }
 
     pub fn enable(&self) {
         self.status.set(ADCStatus::PoweringOn);
@@ -658,7 +658,6 @@ impl Adc {
             ReturnCode::EBUSY
         }
     }
-
 }
 
 struct AdcClock(rcc::PeripheralClock);

@@ -17,7 +17,7 @@ impl<'a, A: hil::adc::Adc> hil::adc::Client for MuxAdc<'a, A> {
                     node.operation.map(|operation| match operation {
                         Operation::SingleSample => {
                             node.operation.clear();
-                            node.client.map(|client| client.sample_ready(sample));                            
+                            node.client.map(|client| client.sample_ready(sample));
                         }
                     });
                 }
