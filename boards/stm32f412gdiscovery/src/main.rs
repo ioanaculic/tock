@@ -583,12 +583,15 @@ pub unsafe fn reset_handler() {
 
     debug!("ID {}", stm32f412g::fsmc::FSMC.read_reg(0x04));
 
-    let tft = components::st7789h2::ST7789H2Component::new(mux_alarm).finalize(
-        components::st7789h2_component_helper!(
+    let tft = components::st77xx::ST77XXComponent::new(mux_alarm).finalize(
+        components::st77xx_component_helper!(
+            &capsules::st77xx::ST7789H2,
             // fsmc
             &stm32f412g::fsmc::FSMC,
             // timer type
             stm32f412g::tim2::Tim2,
+            // dc pin (optional)
+            None,
             // reset pin
             stm32f412g::gpio::PinId::PD11.get_pin().as_ref().unwrap()
         ),

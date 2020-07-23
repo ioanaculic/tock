@@ -23,7 +23,7 @@
 //! );
 //! ```
 use capsules::memory_async::SpiMemory;
-use capsules::st7735::ST7735;
+use capsules::st7735::ST77XX;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use core::mem::MaybeUninit;
 use kernel::component::Component;
@@ -39,8 +39,8 @@ macro_rules! st7735_component_helper {
         use capsules::st7735::ST7735;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;
-        use kernel::hil::spi::{self, SpiMasterDevice};
         use core::mem::MaybeUninit;
+        use kernel::hil::spi::{self, SpiMasterDevice};
         let st7735_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
             components::spi::SpiComponent::new($spi_mux, $select)
                 .finalize(components::spi_component_helper!($S));
@@ -50,8 +50,9 @@ macro_rules! st7735_component_helper {
             4_000_000,
         );
         let st7735_mem: &'static capsules::memory_async::SpiMemory<'static> =
-            components::memory_async::SpiMemoryComponent::new()
-                .finalize(components::spi_memory_component_helper!($S, $select, $spi_mux));
+            components::memory_async::SpiMemoryComponent::new().finalize(
+                components::spi_memory_component_helper!($S, $select, $spi_mux),
+            );
         static mut st7735_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut st7735: MaybeUninit<ST7735<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
@@ -71,9 +72,7 @@ impl<A: 'static + time::Alarm<'static>> ST7735Component<A> {
     }
 }
 
-impl<A: 'static + time::Alarm<'static>> Component
-    for ST7735Component<A>
-{
+impl<A: 'static + time::Alarm<'static>> Component for ST7735Component<A> {
     type StaticInput = (
         &'static SpiMemory<'static>,
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
