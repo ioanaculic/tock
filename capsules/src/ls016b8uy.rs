@@ -26,7 +26,7 @@ use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
 use kernel::hil::gpio;
-use kernel::hil::memory_async;
+use kernel::hil::memory_async::{self, BusWidth};
 use kernel::hil::screen::{
     self, ScreenClient, ScreenPixelFormat, ScreenRotation, ScreenSetupClient,
 };
@@ -414,7 +414,8 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: send command has no buffer"),
             |buffer| {
                 // buffer[0] = cmd.id;
-                self.mem.write_addr_8(cmd.id, buffer, len);
+                self.mem
+                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
             },
         );
     }
@@ -426,7 +427,8 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: send command has no buffer"),
             |buffer| {
                 // buffer[0] = cmd.id;
-                self.mem.write_addr_8(cmd.id, buffer, 0);
+                self.mem
+                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
             },
         );
     }
@@ -443,7 +445,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
                             buffer[i - position] = buffer[i];
                         }
                     }
-                    self.mem.write(buffer, len);
+                    self.mem.write(BusWidth::Bits8, buffer, len);
                 },
             );
         } else {
@@ -456,7 +458,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: no write buffer"),
             |buffer| {
                 self.status.set(Status::SendParametersSlice);
-                self.mem.write(buffer, len);
+                self.mem.write(BusWidth::Bits16, buffer, len / 2);
             },
         );
     }
@@ -472,7 +474,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
                     self.buffer.map_or_else(
                         || panic!("ls016b8uy: fill has no buffer"),
                         |buffer| {
-                            let bytes = 128 * 160 * 2;
+                            let bytes = 240 * 240 * 2;
                             let buffer_space = (buffer.len() - 9) / 2 * 2;
                             let repeat = (bytes / buffer_space) + 1;
                             sequence[2] = SendCommand::Repeat(&WRITE_RAM, 9, buffer_space, repeat);
@@ -594,7 +596,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
                 self.sequence_buffer.map_or_else(
                     || panic!("ls016b8uy: do next op has no sequence buffer"),
                     |sequence| {
-                        debug!("enter sequence");
+                        // debug!("enter sequence");
                         // sendf next command in the sequence
                         let position = self.position_in_sequence.get();
                         self.position_in_sequence
@@ -647,7 +649,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
                                 }
                             }
                         }
-                        debug!("exit sequence");
+                        // debug!("exit sequence");
                     },
                 );
             }
@@ -729,15 +731,23 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
                     || panic!("ls016b8uy: set memory frame has no buffer"),
                     |buffer| {
                         // CASET
-                        buffer[position] = 0;
-                        buffer[position + 1] = sx as u8;
-                        buffer[position + 2] = 0;
-                        buffer[position + 3] = ex as u8;
+                        // buffer[position] = 0;
+                        // buffer[position + 1] = 0x1E;
+                        // buffer[position + 2] = 0;
+                        // buffer[position + 3] = 0xD1;
+                        buffer[position] = ((0x1E + sx + 104) >> 8 & 0xFF) as u8;
+                        buffer[position + 1] = ((0x1E + sx + 104) & 0xFF) as u8;
+                        buffer[position + 2] = ((0x1E + ex + 104) >> 8 & 0xFF) as u8;
+                        buffer[position + 3] = ((0x1E + ex + 104) & 0xFF) as u8;
                         // RASET
-                        buffer[position + 4] = 0;
-                        buffer[position + 5] = sy as u8;
-                        buffer[position + 6] = 0;
-                        buffer[position + 7] = ey as u8;
+                        buffer[position + 4] = ((0 + sy) >> 8 & 0xFF) as u8;
+                        buffer[position + 5] = ((0 + sy) & 0xFF) as u8;
+                        buffer[position + 6] = ((0 + ey) >> 8 & 0xFF) as u8;
+                        buffer[position + 7] = ((0 + ey) & 0xFF) as u8;
+                        // buffer[position + 4] = 0;
+                        // buffer[position + 5] = sy as u8;
+                        // buffer[position + 6] = 0;
+                        // buffer[position + 7] = 0xB3u8.wrapping_add(sy as u8);
                     },
                 );
                 ReturnCode::SUCCESS
@@ -938,13 +948,13 @@ impl<'a, A: Alarm<'a>> screen::Screen for LS016B8UY<'a, A> {
             );
             if buffer_len >= 9 {
                 // set buffer
-                let err = self.set_memory_frame(1, x, y, x + width, y + height);
+                let err = self.set_memory_frame(0, x, y, x + width, y + height);
                 if err == ReturnCode::SUCCESS {
                     self.sequence_buffer.map_or_else(
                         || panic!("ls016b8uy: write no sequence buffer"),
                         |sequence| {
-                            sequence[0] = SendCommand::Position(&CASET, 1, 4);
-                            sequence[1] = SendCommand::Position(&RASET, 5, 4);
+                            sequence[0] = SendCommand::Position(&CASET, 0, 4);
+                            sequence[1] = SendCommand::Position(&RASET, 4, 4);
                             self.sequence_len.set(2);
                         },
                     );
@@ -1024,7 +1034,7 @@ impl<'a, A: Alarm<'a>> memory_async::Client for LS016B8UY<'a, A> {
         } else {
             self.buffer.replace(buffer);
         }
-        debug!("do next op");
+        // debug!("do next op");
         self.do_next_op();
     }
 }

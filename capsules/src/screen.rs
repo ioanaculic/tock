@@ -289,7 +289,7 @@ impl<'a> Screen<'a> {
                         );
                         self.buffer.take().map_or(ReturnCode::FAIL, |buffer| {
                             let len = self.fill_next_buffer_for_write(buffer);
-                            debug!("fill len {}", len);
+                            // debug!("fill len {}", len);
                             if len > 0 {
                                 self.screen.write(buffer, len)
                             } else {
@@ -307,7 +307,11 @@ impl<'a> Screen<'a> {
                 .apps
                 .enter(appid, |app, _| {
                     let len = if let Some(ref shared) = app.shared {
-                        shared.len()
+                        if shared.len() < data1 {
+                            shared.len()
+                        } else {
+                            data1
+                        }
                     } else {
                         0
                     };
@@ -446,8 +450,8 @@ impl<'a> Screen<'a> {
                                     // TODO should panic or report an error?
                                     panic!("screen has no slice to send");
                                 }
-                                app.write_position = app.write_position + write_len * 2;
-                                write_len * 2
+                                app.write_position = app.write_position + write_len;
+                                write_len
                             } else {
                                 // unknown command
                                 // stop writing

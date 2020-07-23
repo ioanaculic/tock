@@ -5,7 +5,7 @@ use kernel::common::deferred_call::DeferredCall;
 use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::debug;
-use kernel::hil::memory_async::{Client, Memory};
+use kernel::hil::memory_async::{BusWidth, Client, Memory};
 use kernel::{ClockInterface, ReturnCode};
 
 use crate::deferred_calls::DeferredCallTask;
@@ -72,7 +72,7 @@ register_bitfields![u32,
         /// Flash access enable
         /// Enables NOR Flash memory access operations
         FACCEN OFFSET(6) NUMBITS(1) [],
-        /// Memory data bus width
+        /// Memory data bus_width width
         MWID OFFSET(4) NUMBITS(2) [
             BITS_8 = 0b00,
             BITS_16 = 0b01
@@ -144,6 +144,15 @@ struct FsmcBank {
     ram: ReadWrite<u16>,
 }
 
+fn bus_width_in_bytes(bus_width: BusWidth) -> usize {
+    match bus_width {
+        BusWidth::Bits8 => 1,
+        BusWidth::Bits16 => 2,
+        BusWidth::Bits32 => 3,
+        BusWidth::Bits64 => 4,
+    }
+}
+
 const FSMC_BANK1: StaticRef<FsmcBank> = unsafe { StaticRef::new(0x60000000 as *const FsmcBank) };
 const FSMC_BANK2_RESERVED: StaticRef<FsmcBank> = unsafe { StaticRef::new(0x0 as *const FsmcBank) };
 const FSMC_BANK3: StaticRef<FsmcBank> = unsafe { StaticRef::new(0x68000000 as *const FsmcBank) };
@@ -157,6 +166,7 @@ pub struct Fsmc {
     client: OptionalCell<&'static dyn Client>,
 
     buffer: TakeCell<'static, [u8]>,
+    bus_width: Cell<usize>,
     len: Cell<usize>,
 }
 
@@ -172,6 +182,7 @@ impl Fsmc {
             client: OptionalCell::empty(),
 
             buffer: TakeCell::empty(),
+            bus_width: Cell::new(1),
             len: Cell::new(0),
         }
     }
@@ -233,18 +244,18 @@ impl Fsmc {
         });
     }
 
-    pub fn write(&self, addr: u16, data: u16) {
-        self.bank[0].reg.set(addr);
-        unsafe {
-            llvm_asm!("dsb 0xf");
-        }
-        self.bank[0].ram.set(data);
-        unsafe {
-            llvm_asm!("dsb 0xf");
-        }
-    }
+    // pub fn write(&self, addr: u16, data: u16) {
+    //     self.bank[0].reg.set(addr);
+    //     unsafe {
+    //         llvm_asm!("dsb 0xf");
+    //     }
+    //     self.bank[0].ram.set(data);
+    //     unsafe {
+    //         llvm_asm!("dsb 0xf");
+    //     }
+    // }
 
-    pub fn read(&self, addr: u16) -> u16 {
+    pub fn read_reg(&self, addr: u16) -> u16 {
         self.bank[0].reg.set(addr);
         unsafe {
             llvm_asm!("dsb 0xf");
@@ -252,6 +263,7 @@ impl Fsmc {
         self.bank[0].ram.get()
     }
 
+    #[inline]
     fn write_reg(&self, addr: u16) {
         self.bank[0].reg.set(addr);
         unsafe {
@@ -259,6 +271,7 @@ impl Fsmc {
         }
     }
 
+    #[inline]
     fn write_data(&self, data: u16) {
         self.bank[0].ram.set(data);
         unsafe {
@@ -284,37 +297,68 @@ impl ClockInterface for FsmcClock {
 }
 
 impl Memory for Fsmc {
-    fn write_addr_8(&self, addr: u8, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+    fn write_addr(
+        &self,
+        addr_width: BusWidth,
+        addr: usize,
+        data_width: BusWidth,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> ReturnCode {
         debug!("write reg {} len {}", addr, len);
-        self.write_reg(addr as u16);
-        if buffer.len() >= len {
-            // for pos in 0..len {
-            //     self.write_data(buffer[pos] as u16);
-            // }
-            self.buffer.replace(buffer);
-            self.len.set(len);
-            DEFERRED_CALL.set();
+        match addr_width {
+            BusWidth::Bits8 | BusWidth::Bits16 => match data_width {
+                BusWidth::Bits8 | BusWidth::Bits16 => {
+                    self.write_reg(addr as u16);
+                    self.write(data_width, buffer, len)
+                }
+                _ => ReturnCode::ENOSUPPORT,
+            },
+            _ => ReturnCode::ENOSUPPORT,
         }
-        ReturnCode::SUCCESS
     }
-    fn read_addr_8(&self, addr: u8, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+    fn read_addr(
+        &self,
+        _addr_width: BusWidth,
+        _addr: usize,
+        _data_width: BusWidth,
+        _buffer: &'static mut [u8],
+        _len: usize,
+    ) -> ReturnCode {
         ReturnCode::ENOSUPPORT
     }
 
-    fn write(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         debug!("write {}", len);
-        if buffer.len() >= len {
-            for pos in 0..len {
-                self.write_data(buffer[pos] as u16);
+        match data_width {
+            BusWidth::Bits8 | BusWidth::Bits16 => {
+                let bytes = bus_width_in_bytes(data_width);
+                if len > 0 {
+                    debug!("{:?}", &buffer[0..4]);
+                }
+                if buffer.len() >= len * bytes {
+                    for pos in 0..len {
+                        let mut data: u16 = 0;
+                        for byte in 0..bytes {
+                            data = data
+                                | (buffer[bytes * pos + (bytes - byte - 1)] as u16) << (8 * byte);
+                        }
+                        self.write_data(data);
+                    }
+                    self.buffer.replace(buffer);
+                    self.bus_width.set(bytes);
+                    self.len.set(len);
+                    DEFERRED_CALL.set();
+                    ReturnCode::SUCCESS
+                } else {
+                    ReturnCode::ENOMEM
+                }
             }
-            self.buffer.replace(buffer);
-            self.len.set(len);
-            DEFERRED_CALL.set();
+            _ => ReturnCode::ENOSUPPORT,
         }
-        ReturnCode::SUCCESS
     }
 
-    fn read(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+    fn read(&self, _data_width: BusWidth, _buffer: &'static mut [u8], _len: usize) -> ReturnCode {
         ReturnCode::ENOSUPPORT
     }
 

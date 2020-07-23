@@ -581,8 +581,10 @@ pub unsafe fn reset_handler() {
     );
     stm32f412g::adc::ADC1.set_client(adc);
 
-    let tft = components::ls016b8uy::LS0168BUYComponent::new(mux_alarm).finalize(
-        components::ls016b8u6_component_helper!(
+    debug!("ID {}", stm32f412g::fsmc::FSMC.read_reg(0x04));
+
+    let tft = components::st7789h2::ST7789H2Component::new(mux_alarm).finalize(
+        components::st7789h2_component_helper!(
             // fsmc
             &stm32f412g::fsmc::FSMC,
             // timer type

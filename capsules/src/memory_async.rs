@@ -1,8 +1,17 @@
 use kernel::common::cells::OptionalCell;
-use kernel::hil::memory_async::{Client, Memory};
+use kernel::debug;
+use kernel::hil::memory_async::{BusWidth, Client, Memory};
 use kernel::hil::spi::{SpiMasterClient, SpiMasterDevice};
 use kernel::ReturnCode;
-use kernel::debug;
+
+fn bus_width_in_bytes(bus_width: BusWidth) -> usize {
+    match bus_width {
+        BusWidth::Bits8 => 1,
+        BusWidth::Bits16 => 2,
+        BusWidth::Bits32 => 3,
+        BusWidth::Bits64 => 4,
+    }
+}
 
 pub struct SpiMemory<'a> {
     spi: &'a dyn SpiMasterDevice,
@@ -25,56 +34,107 @@ impl<'a> SpiMemory<'a> {
 }
 
 impl<'a> Memory for SpiMemory<'a> {
-    fn write_addr_8(&self, addr: u8, buffer: &'static mut [u8], len: usize) -> ReturnCode {
-        if buffer.len() > len {
-            for index in (0..len).rev() {
-                buffer[index + 1] = buffer[index];
+    fn write_addr(
+        &self,
+        addr_width: BusWidth,
+        addr: usize,
+        data_width: BusWidth,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> ReturnCode {
+        match addr_width {
+            BusWidth::Bits8 => {
+                if buffer.len() > len {
+                    for index in (0..len).rev() {
+                        buffer[index + 1] = buffer[index];
+                    }
+                    buffer[0] = addr as u8;
+                    self.write(data_width, buffer, len)
+                } else {
+                    ReturnCode::ENOMEM
+                }
             }
-            buffer[0] = addr;
-            self.write(buffer, len)
-        } else {
-            self.client
-                .map(move |client| client.command_complete(buffer, 0));
-            ReturnCode::ENOMEM
+
+            _ => ReturnCode::ENOSUPPORT,
+        }
+        // match status {
+        //     ReturnCode::SUCCESS | ReturnCode::SuccessWithValue{} => {},
+        //     _ => {
+        //         self.client
+        //         .map(move |client| client.command_complete(buffer, 0));
+        //     }
+        // };
+        // status
+    }
+
+    fn read_addr(
+        &self,
+        addr_width: BusWidth,
+        addr: usize,
+        data_width: BusWidth,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> ReturnCode {
+        match addr_width {
+            BusWidth::Bits8 => {
+                self.read_write_buffer
+                    .take()
+                    .map_or(ReturnCode::ENOMEM, move |write_buffer| {
+                        if write_buffer.len() > len && write_buffer.len() > 0 && buffer.len() > len
+                        {
+                            write_buffer[0] = addr as u8;
+                            self.read_write_buffer.replace(write_buffer);
+                            self.read(data_width, buffer, len)
+                        } else {
+                            ReturnCode::ENOMEM
+                        }
+                    })
+            }
+
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
-    fn read_addr_8(&self, addr: u8, buffer: &'static mut [u8], len: usize) -> ReturnCode {
-        self.read_write_buffer
-            .take()
-            .map_or(ReturnCode::ENOMEM, move |write_buffer| {
-                if write_buffer.len() > len && write_buffer.len() > 0 && buffer.len() > len {
-                    write_buffer[0] = addr;
-                    self.read_write_buffer.replace(write_buffer);
-                    self.read(buffer, len)
+    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+        match data_width {
+            BusWidth::Bits8 => {
+                if buffer.len() >= len {
+                    debug!("write len {}", len);
+                    self.spi.read_write_bytes(buffer, None, len)
                 } else {
+                    // panic!("write error");
                     ReturnCode::ENOMEM
                 }
-            })
-    }
-
-    fn write(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
-        if buffer.len() >= len {
-            debug! ("write len {}", len);
-            self.spi.read_write_bytes(buffer, None, len)
-        } else {
-            panic! ("write error");
-            self.client
-                .map(move |client| client.command_complete(buffer, 0));
-            ReturnCode::ENOMEM
+            }
+            _ => ReturnCode::ENOSUPPORT,
         }
+        // match status {
+        //     ReturnCode::SUCCESS | ReturnCode::SuccessWithValue{} => {},
+        //     _ => {
+        //         self.client
+        //         .map(move |client| client.command_complete(buffer, 0));
+        //     }
+        // };
+        // status
     }
 
-    fn read(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
-        self.read_write_buffer
-            .take()
-            .map_or(ReturnCode::ENOMEM, move |write_buffer| {
-                if write_buffer.len() >= len && write_buffer.len() > 0 && buffer.len() > len {
-                    self.spi.read_write_bytes(write_buffer, Some(buffer), len)
-                } else {
-                    ReturnCode::ENOMEM
-                }
-            })
+    fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+        match data_width {
+            BusWidth::Bits8 => {
+                self.read_write_buffer
+                    .take()
+                    .map_or(ReturnCode::ENOMEM, move |write_buffer| {
+                        if write_buffer.len() >= len && write_buffer.len() > 0 && buffer.len() > len
+                        {
+                            self.spi.read_write_bytes(write_buffer, Some(buffer), len)
+                        } else {
+                            ReturnCode::ENOMEM
+                        }
+                    })
+            }
+
+            _ => ReturnCode::ENOSUPPORT,
+        }
     }
 
     fn set_client(&self, client: &'static dyn Client) {
@@ -89,7 +149,7 @@ impl<'a> SpiMasterClient for SpiMemory<'a> {
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
     ) {
-        debug! ("write done {}", len);
+        debug!("write done {}", len);
         let mut buffer = write_buffer;
         if let Some(buf) = read_buffer {
             self.read_write_buffer.replace(buffer);
