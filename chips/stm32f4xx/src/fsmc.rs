@@ -244,22 +244,8 @@ impl Fsmc {
         });
     }
 
-    // pub fn write(&self, addr: u16, data: u16) {
-    //     self.bank[0].reg.set(addr);
-    //     unsafe {
-    //         llvm_asm!("dsb 0xf");
-    //     }
-    //     self.bank[0].ram.set(data);
-    //     unsafe {
-    //         llvm_asm!("dsb 0xf");
-    //     }
-    // }
-
-    pub fn read_reg(&self, addr: u16) -> u16 {
-        self.bank[0].reg.set(addr);
-        unsafe {
-            llvm_asm!("dsb 0xf");
-        }
+    #[inline]
+    pub fn read_reg(&self) -> u16 {
         self.bank[0].ram.get()
     }
 
@@ -319,13 +305,22 @@ impl Bus for Fsmc {
     }
     fn read_addr(
         &self,
-        _addr_width: BusWidth,
-        _addr: usize,
-        _data_width: BusWidth,
+        addr_width: BusWidth,
+        addr: usize,
+        data_width: BusWidth,
         buffer: &'static mut [u8],
-        _len: usize,
+        len: usize,
     ) -> Result<(), (ReturnCode, &'static mut [u8])> {
-        Err((ReturnCode::ENOSUPPORT, buffer))
+        match addr_width {
+            BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => match data_width {
+                BusWidth::Bits8 | BusWidth::Bits16LE | BusWidth::Bits16BE => {
+                    self.write_reg(addr as u16);
+                    self.read(data_width, buffer, len)
+                }
+                _ => Err((ReturnCode::ENOSUPPORT, buffer)),
+            },
+            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
+        }
     }
 
     fn write(
@@ -371,11 +366,36 @@ impl Bus for Fsmc {
 
     fn read(
         &self,
-        _data_width: BusWidth,
+        data_width: BusWidth,
         buffer: &'static mut [u8],
-        _len: usize,
+        len: usize,
     ) -> Result<(), (ReturnCode, &'static mut [u8])> {
-        Err((ReturnCode::ENOSUPPORT, buffer))
+        match data_width {
+            BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
+                let bytes = bus_width_in_bytes(&data_width);
+                if buffer.len() >= len * bytes {
+                    for pos in 0..len {
+                        let data = self.read_reg();
+                        for byte in 0..bytes {
+                            buffer[bytes * pos
+                                    + match data_width {
+                                        BusWidth::Bits8 | BusWidth::Bits16LE => byte,
+                                        BusWidth::Bits16BE => (bytes - byte - 1),
+                                        _ => panic!("fsmc bus error"),
+                                    }] = (data >> (8 * byte)) as u8;
+                        }
+                    }
+                    self.buffer.replace(buffer);
+                    self.bus_width.set(bytes);
+                    self.len.set(len);
+                    DEFERRED_CALL.set();
+                    Ok(())
+                } else {
+                    Err((ReturnCode::ENOMEM, buffer))
+                }
+            }
+            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
+        }
     }
 
     fn set_client(&self, client: &'static dyn Client) {

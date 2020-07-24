@@ -573,8 +573,6 @@ pub unsafe fn reset_handler() {
     );
     stm32f412g::adc::ADC1.set_client(adc);
 
-    debug!("ID {}", stm32f412g::fsmc::FSMC.read_reg(0x04));
-
     let tft = components::st77xx::ST77XXComponent::new(mux_alarm).finalize(
         components::st77xx_component_helper!(
             &capsules::st77xx::ST7789H2,
@@ -594,7 +592,7 @@ pub unsafe fn reset_handler() {
     let screen = components::screen::ScreenComponent::new(board_kernel, tft, Some(tft))
         .finalize(components::screen_buffer_size!(40960));
 
-    let stm32f412g = STM32F412GDiscovery { {
+    let stm32f412g = STM32F412GDiscovery {
         console: console,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
         led: led,

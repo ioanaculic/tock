@@ -25,7 +25,7 @@
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
-use kernel::hil::bus::{self, BusWidth};
+use kernel::hil::bus::{self, BusWidth, Client};
 use kernel::hil::gpio;
 use kernel::hil::screen::{
     self, ScreenClient, ScreenPixelFormat, ScreenRotation, ScreenSetupClient,
@@ -341,9 +341,10 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
         self.buffer.take().map_or_else(
             || panic!("st77xx: send command has no buffer"),
             |buffer| {
-                // buffer[0] = cmd.id;
-                self.bus
-                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
+                if let Err((_, buffer)) = self.bus
+                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0) {
+                        self.command_complete (buffer, 0);
+                    }
             },
         );
     }
@@ -357,9 +358,11 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
         self.buffer.take().map_or_else(
             || panic!("st77xx: send command has no buffer"),
             |buffer| {
-                // buffer[0] = cmd.id;
+                if let Err((_, buffer)) =
                 self.bus
-                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
+                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0) {
+                        self.command_complete (buffer, 0);
+                    }
             },
         );
     }
@@ -379,7 +382,10 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                     if let Some(dc) = self.dc {
                         dc.set();
                     }
-                    self.bus.write(BusWidth::Bits8, buffer, len);
+                    if let Err((_, buffer)) =
+                    self.bus.write(BusWidth::Bits8, buffer, len) {
+                        self.command_complete (buffer, 0);
+                    }
                 },
             );
         } else {
@@ -395,7 +401,10 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                 if let Some(dc) = self.dc {
                     dc.set();
                 }
-                self.bus.write(BusWidth::Bits16BE, buffer, len / 2);
+                if let Err((_, buffer)) =
+                self.bus.write(BusWidth::Bits16BE, buffer, len / 2) {
+                    self.command_complete (buffer, 0);
+                }
             },
         );
     }
@@ -1174,6 +1183,136 @@ const ST7789H2_INIT_SEQUENCE: [SendCommand; 22] = crate::default_parameters_sequ
     &TEARING_EFFECT
 );
 
+/******** LS016B8UY *********/
+
+const VSYNC_OUTPUT: Command = Command {
+    id: 0x35,
+    parameters: Some(&[0x00]),
+    delay: 0,
+};
+
+const NORMAL_DISPLAY: Command = Command {
+    id: 0x36,
+    parameters: Some(&[0x83]),
+    delay: 0,
+};
+
+const PANEL_SETTING1: Command = Command {
+    id: 0xB0,
+    parameters: Some(&[0x01, 0xFE]),
+    delay: 0,
+};
+
+const PANEL_SETTING2: Command = Command {
+    id: 0xB1,
+    parameters: Some(&[0xDE, 0x21]),
+    delay: 0,
+};
+
+const OSCILLATOR: Command = Command {
+    id: 0xB3,
+    parameters: Some(&[0x02]),
+    delay: 0,
+};
+
+const PANEL_SETTING_LOCK: Command = Command {
+    id: 0xB4,
+    parameters: None,
+    delay: 0,
+};
+
+const PANEL_V_PORCH: Command = Command {
+    id: 0xB7,
+    parameters: Some(&[0x05, 0x33]),
+    delay: 0,
+};
+
+const PANEL_IDLE_V_PORCH: Command = Command {
+    id: 0xB8,
+    parameters: Some(&[0x05, 0x33]),
+    delay: 0,
+};
+
+const GVDD: Command = Command {
+    id: 0xC0,
+    parameters: Some(&[0x53]),
+    delay: 0,
+};
+
+const OPAMP: Command = Command {
+    id: 0xC2,
+    parameters: Some(&[0x03, 0x12]),
+    delay: 0,
+};
+
+const RELOAD_MTP_VCOMH: Command = Command {
+    id: 0xC5,
+    parameters: Some(&[0x00, 0x45]),
+    delay: 0,
+};
+
+const PANEL_TIMING1: Command = Command {
+    id: 0xC8,
+    parameters: Some(&[0x04, 0x03]),
+    delay: 0,
+};
+
+const PANEL_TIMING2: Command = Command {
+    id: 0xC9,
+    parameters: Some(&[0x5E, 0x08]),
+    delay: 0,
+};
+
+const PANEL_TIMING3: Command = Command {
+    id: 0xCA,
+    parameters: Some(&[0x0A, 0x0C, 0x02]),
+    delay: 0,
+};
+
+const PANEL_TIMING4: Command = Command {
+    id: 0xCC,
+    parameters: Some(&[0x03, 0x04]),
+    delay: 0,
+};
+
+const PANEL_POWER: Command = Command {
+    id: 0xD0,
+    parameters: Some(&[0x0C]),
+    delay: 0,
+};
+
+const LS0168BUY_TEARING_EFFECT: Command = Command {
+    id: 0xDD,
+    parameters: Some(&[0x00]),
+    delay: 0,
+};
+
+const LS016B8UY_INIT_SEQUENCE: [SendCommand; 23] = default_parameters_sequence!(
+    &VSYNC_OUTPUT,
+    &COLMOD,
+    &PANEL_SETTING1,
+    &PANEL_SETTING2,
+    &PANEL_V_PORCH,
+    &PANEL_IDLE_V_PORCH,
+    &PANEL_TIMING1,
+    &PANEL_TIMING2,
+    &PANEL_TIMING3,
+    &PANEL_TIMING4,
+    &PANEL_POWER,
+    &OSCILLATOR,
+    &GVDD,
+    &RELOAD_MTP_VCOMH,
+    &OPAMP,
+    &LS0168BUY_TEARING_EFFECT,
+    &PANEL_SETTING_LOCK,
+    &SLEEP_OUT,
+    &NORMAL_DISPLAY,
+    &CASET,
+    &RASET,
+    &DISPLAY_ON,
+    &IDLE_OFF
+);
+
 pub struct ST77XXScreen {
     init_sequence: &'static [SendCommand],
     default_width: usize,
@@ -1193,4 +1332,11 @@ pub const ST7789H2: ST77XXScreen = ST77XXScreen {
     default_width: 240,
     default_height: 240,
     inverted: true,
+};
+
+pub const LS016B8UY: ST77XXScreen = ST77XXScreen {
+    init_sequence: &LS016B8UY_INIT_SEQUENCE,
+    default_width: 240,
+    default_height: 240,
+    inverted: false,
 };

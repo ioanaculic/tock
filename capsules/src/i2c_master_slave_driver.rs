@@ -368,7 +368,7 @@ impl Driver for I2CMasterSlaveDriver<'_> {
                                 *c = d[i];
                             }
 
-                            hil::i2c::I2CSlave::read_send(self.i2c, kernel_tx, read_len as u8);
+                            hil::i2c::I2CSlave::read_send(self.i2c, kernel_tx, read_len as u8).expect ("spi device error");
                         });
                     });
                 });

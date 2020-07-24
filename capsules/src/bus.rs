@@ -103,17 +103,8 @@ impl<'a> Bus for SpiBus<'a> {
                 Ok(()) => Ok(()),
             }
         } else {
-            // panic!("write error");
             Err((ReturnCode::ENOMEM, buffer))
         }
-        // match status {
-        //     ReturnCode::SUCCESS | ReturnCode::SuccessWithValue{} => {},
-        //     _ => {
-        //         self.client
-        //         .map(move |client| client.command_complete(buffer, 0));
-        //     }
-        // };
-        // status
     }
 
     fn read(

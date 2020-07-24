@@ -461,7 +461,9 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: no write buffer"),
             |buffer| {
                 self.status.set(Status::SendParametersSlice);
-                self.bus.write(BusWidth::Bits16BE, buffer, len / 2);
+                if let Err((_, buffer)) = self.bus.write(BusWidth::Bits16BE, buffer, len / 2) {
+                    self.command_complete (buffer, len / 2);
+                }
             },
         );
     }
