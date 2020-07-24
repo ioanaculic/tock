@@ -68,13 +68,18 @@ impl<I: 'static + i2c::I2CMaster> I2CMasterDriver<I> {
                         self.tx.put(Transaction { app_id, read_len });
                         app.slice = Some(app_buffer);
 
-                        match command {
+                        match match command {
                             Cmd::Ping => return ReturnCode::EINVAL,
                             Cmd::Write => self.i2c.write(addr, buffer, wlen),
                             Cmd::Read => self.i2c.read(addr, buffer, rlen),
                             Cmd::WriteRead => self.i2c.write_read(addr, buffer, wlen, rlen),
+                        } {
+                            Err((code, buffer)) => {
+                                self.buf.replace (buffer);
+                                code
+                            }
+                            Ok(()) => ReturnCode::SUCCESS
                         }
-                        ReturnCode::SUCCESS
                     });
                     // buffer has not been returned by I2C
                     // i2c_master.rs should not allow us to get here

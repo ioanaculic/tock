@@ -151,7 +151,10 @@ impl<'a, S: hil::spi::SpiMasterDevice> FM25CL<'a, S> {
                 self.client_write_len.set(write_len as u16);
 
                 self.state.set(State::WriteEnable);
-                self.spi.read_write_bytes(txbuffer, None, 1)
+                match self.spi.read_write_bytes(txbuffer, None, 1) {
+                    Err((code, _, _)) => code,
+                    Ok(()) => ReturnCode::SUCCESS,
+                }
             })
     }
 
@@ -174,8 +177,13 @@ impl<'a, S: hil::spi::SpiMasterDevice> FM25CL<'a, S> {
                         let read_len = cmp::min(rxbuffer.len() - 3, len as usize);
 
                         self.state.set(State::ReadMemory);
-                        self.spi
+                        match self
+                            .spi
                             .read_write_bytes(txbuffer, Some(rxbuffer), read_len + 3)
+                        {
+                            Err((code, _, _)) => code,
+                            Ok(()) => ReturnCode::SUCCESS,
+                        }
                     })
             })
     }
@@ -220,7 +228,7 @@ impl<S: hil::spi::SpiMasterDevice> hil::spi::SpiMasterClient for FM25CL<'_, S> {
                     }
 
                     self.spi
-                        .read_write_bytes(write_buffer, read_buffer, write_len + 3);
+                        .read_write_bytes(write_buffer, read_buffer, write_len + 3).expect ("spi device error");
                 });
             }
             State::WriteMemory => {
@@ -281,7 +289,7 @@ impl<S: hil::spi::SpiMasterDevice> FM25CLCustom for FM25CL<'_, S> {
 
                         // Use 4 bytes instead of the required 2 because that works better
                         // with DMA for some reason.
-                        self.spi.read_write_bytes(txbuffer, Some(rxbuffer), 4);
+                        self.spi.read_write_bytes(txbuffer, Some(rxbuffer), 4).expect ("i2c device error");
                         self.state.set(State::ReadStatus);
                         ReturnCode::SUCCESS
                     })

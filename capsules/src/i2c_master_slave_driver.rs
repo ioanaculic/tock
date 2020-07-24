@@ -80,6 +80,7 @@ impl hil::i2c::I2CHwMasterClient for I2CMasterSlaveDriver<'_> {
             hil::i2c::Error::ArbitrationLost => -3,
             hil::i2c::Error::Overrun => -4,
             hil::i2c::Error::NotSupported => -5,
+            hil::i2c::Error::DeviceError => -6,
             hil::i2c::Error::CommandComplete => 0,
         };
 
@@ -205,7 +206,7 @@ impl hil::i2c::I2CHwSlaveClient for I2CMasterSlaveDriver<'_> {
         // just let the hardware layer have it. But, if it does happen
         // we can respond.
         self.slave_buffer1.take().map(|buffer| {
-            hil::i2c::I2CSlave::write_receive(self.i2c, buffer, 255);
+            hil::i2c::I2CSlave::write_receive(self.i2c, buffer, 255).expect ("i2c device error");
         });
     }
 }
@@ -297,7 +298,7 @@ impl Driver for I2CMasterSlaveDriver<'_> {
                             hil::i2c::I2CMaster::write(self.i2c,
                                                        address,
                                                        kernel_tx,
-                                                       write_len as u8);
+                                                       write_len as u8).expect ("i2c device error");
                         });
                     });
                 });
@@ -325,7 +326,7 @@ impl Driver for I2CMasterSlaveDriver<'_> {
                             self.master_action.set(MasterAction::Read(read_len as u8));
 
                             hil::i2c::I2CMaster::enable(self.i2c);
-                            hil::i2c::I2CMaster::read(self.i2c, address, kernel_tx, read_len as u8);
+                            hil::i2c::I2CMaster::read(self.i2c, address, kernel_tx, read_len as u8).expect ("i2c device error");
                         });
                     });
                 });
@@ -338,7 +339,7 @@ impl Driver for I2CMasterSlaveDriver<'_> {
                 // We can always handle a write since this module has a buffer.
                 // .map will handle if we have already done this.
                 self.slave_buffer1.take().map(|buffer| {
-                    hil::i2c::I2CSlave::write_receive(self.i2c, buffer, 255);
+                    hil::i2c::I2CSlave::write_receive(self.i2c, buffer, 255).expect ("i2c device error");
                 });
 
                 // Actually get things going
@@ -417,7 +418,7 @@ impl Driver for I2CMasterSlaveDriver<'_> {
                                                             address,
                                                             kernel_tx,
                                                             write_len as u8,
-                                                            read_len as u8);
+                                                            read_len as u8).expect ("i2c device error");
                         });
                     });
                 });

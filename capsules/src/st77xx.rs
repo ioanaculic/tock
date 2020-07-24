@@ -68,6 +68,7 @@ const SLEEP_OUT: Command = Command {
     delay: 120, // 255?
 };
 
+#[allow(dead_code)]
 const PARTIAL_ON: Command = Command {
     id: 0x12,
     parameters: None,
@@ -104,6 +105,7 @@ const WRITE_RAM: Command = Command {
     delay: 0,
 };
 
+#[allow(dead_code)]
 const READ_RAM: Command = Command {
     id: 0x2E,
     parameters: None,
@@ -128,12 +130,14 @@ const NORON: Command = Command {
     delay: 0,
 };
 
+#[allow(dead_code)]
 const IDLE_OFF: Command = Command {
     id: 0x38,
     parameters: None,
     delay: 20,
 };
 
+#[allow(dead_code)]
 const IDLE_ON: Command = Command {
     id: 0x39,
     parameters: None,
@@ -969,6 +973,7 @@ impl<'a, A: Alarm<'a>> bus::Client for ST77XX<'a, A> {
 }
 
 /************ ST7735 **************/
+#[allow(dead_code)]
 const GAMSET: Command = Command {
     id: 0x26,
     /// Default parameters: Gama Set

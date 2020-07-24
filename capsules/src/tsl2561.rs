@@ -232,7 +232,7 @@ impl<'a> TSL2561<'a> {
 
             buffer[0] = Registers::Id as u8 | COMMAND_REG;
             // buffer[0] = Registers::Id as u8;
-            self.i2c.write(buffer, 1);
+            self.i2c.write(buffer, 1).expect ("i2c device error");
             self.state.set(State::SelectId);
         });
     }
@@ -249,7 +249,7 @@ impl<'a> TSL2561<'a> {
 
             buf[0] = Registers::Control as u8 | COMMAND_REG;
             buf[1] = POWER_ON;
-            self.i2c.write(buf, 2);
+            self.i2c.write(buf, 2).expect ("i2c device error");
             self.state.set(State::TakeMeasurementTurnOn);
         });
     }
@@ -349,7 +349,7 @@ impl i2c::I2CClient for TSL2561<'_> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: i2c::Error) {
         match self.state.get() {
             State::SelectId => {
-                self.i2c.read(buffer, 1);
+                self.i2c.read(buffer, 1).expect ("i2c device error");
                 self.state.set(State::ReadingId);
             }
             State::ReadingId => {
@@ -360,29 +360,29 @@ impl i2c::I2CClient for TSL2561<'_> {
             State::TakeMeasurementTurnOn => {
                 buffer[0] = Registers::Timing as u8 | COMMAND_REG;
                 buffer[1] = INTEGRATE_TIME_101_MS | LOW_GAIN_MODE;
-                self.i2c.write(buffer, 2);
+                self.i2c.write(buffer, 2).expect ("i2c device error");
                 self.state.set(State::TakeMeasurementConfigMeasurement);
             }
             State::TakeMeasurementConfigMeasurement => {
                 buffer[0] = Registers::Interrupt as u8 | COMMAND_REG;
                 buffer[1] = INTERRUPT_CONTROL_LEVEL | INTERRUPT_ON_ADC_DONE;
-                self.i2c.write(buffer, 2);
+                self.i2c.write(buffer, 2).expect ("i2c device error");
                 self.state.set(State::TakeMeasurementReset1);
             }
             State::TakeMeasurementReset1 => {
                 buffer[0] = Registers::Control as u8 | COMMAND_REG;
                 buffer[1] = POWER_OFF;
-                self.i2c.write(buffer, 2);
+                self.i2c.write(buffer, 2).expect ("i2c device error");
                 self.state.set(State::TakeMeasurementReset2);
             }
             State::TakeMeasurementReset2 => {
                 buffer[0] = Registers::Control as u8 | COMMAND_REG;
                 buffer[1] = POWER_ON;
-                self.i2c.write(buffer, 2);
+                self.i2c.write(buffer, 2).expect ("i2c device error");
                 self.state.set(State::Done);
             }
             State::ReadMeasurement1 => {
-                self.i2c.read(buffer, 2);
+                self.i2c.read(buffer, 2).expect ("i2c device error");
                 self.state.set(State::ReadMeasurement2);
             }
             State::ReadMeasurement2 => {
@@ -391,11 +391,11 @@ impl i2c::I2CClient for TSL2561<'_> {
                 buffer[2] = buffer[0];
                 buffer[3] = buffer[1];
                 buffer[0] = Registers::Data0Low as u8 | COMMAND_REG | WORD_PROTOCOL;
-                self.i2c.write(buffer, 2);
+                self.i2c.write(buffer, 2).expect ("i2c device error");
                 self.state.set(State::ReadMeasurement3);
             }
             State::ReadMeasurement3 => {
-                self.i2c.read(buffer, 2);
+                self.i2c.read(buffer, 2).expect ("i2c device error");
                 self.state.set(State::GotMeasurement);
             }
             State::GotMeasurement => {
@@ -408,7 +408,7 @@ impl i2c::I2CClient for TSL2561<'_> {
 
                 buffer[0] = Registers::Control as u8 | COMMAND_REG;
                 buffer[1] = POWER_OFF;
-                self.i2c.write(buffer, 2);
+                self.i2c.write(buffer, 2).expect ("i2c device error");
                 self.interrupt_pin.disable_interrupts();
                 self.state.set(State::Done);
             }
@@ -430,7 +430,7 @@ impl gpio::Client for TSL2561<'_> {
 
             // Read the first of the ADC registers.
             buffer[0] = Registers::Data1Low as u8 | COMMAND_REG | WORD_PROTOCOL;
-            self.i2c.write(buffer, 1);
+            self.i2c.write(buffer, 1).expect ("i2c device error");
             self.state.set(State::ReadMeasurement1);
         });
     }

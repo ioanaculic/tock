@@ -23,7 +23,7 @@ pub trait Bus {
         data_width: BusWidth,
         buffer: &'static mut [u8],
         len: usize,
-    ) -> ReturnCode;
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
     fn read_addr(
         &self,
         addr_width: BusWidth,
@@ -31,10 +31,20 @@ pub trait Bus {
         data_width: BusWidth,
         buffer: &'static mut [u8],
         len: usize,
-    ) -> ReturnCode;
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
 
-    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
-    fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
+    fn write(
+        &self,
+        data_width: BusWidth,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
+    fn read(
+        &self,
+        data_width: BusWidth,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
 
     fn set_client(&self, client: &'static dyn Client);
 }

@@ -304,7 +304,7 @@ impl Bus for Fsmc {
         data_width: BusWidth,
         buffer: &'static mut [u8],
         len: usize,
-    ) -> ReturnCode {
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         debug!("write reg {} len {}", addr, len);
         match addr_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => match data_width {
@@ -312,9 +312,9 @@ impl Bus for Fsmc {
                     self.write_reg(addr as u16);
                     self.write(data_width, buffer, len)
                 }
-                _ => ReturnCode::ENOSUPPORT,
+                _ => Err((ReturnCode::ENOSUPPORT, buffer)),
             },
-            _ => ReturnCode::ENOSUPPORT,
+            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
         }
     }
     fn read_addr(
@@ -322,13 +322,18 @@ impl Bus for Fsmc {
         _addr_width: BusWidth,
         _addr: usize,
         _data_width: BusWidth,
-        _buffer: &'static mut [u8],
+        buffer: &'static mut [u8],
         _len: usize,
-    ) -> ReturnCode {
-        ReturnCode::ENOSUPPORT
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+        Err((ReturnCode::ENOSUPPORT, buffer))
     }
 
-    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+    fn write(
+        &self,
+        data_width: BusWidth,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         debug!("write {}", len);
         match data_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
@@ -355,17 +360,22 @@ impl Bus for Fsmc {
                     self.bus_width.set(bytes);
                     self.len.set(len);
                     DEFERRED_CALL.set();
-                    ReturnCode::SUCCESS
+                    Ok(())
                 } else {
-                    ReturnCode::ENOMEM
+                    Err((ReturnCode::ENOMEM, buffer))
                 }
             }
-            _ => ReturnCode::ENOSUPPORT,
+            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
         }
     }
 
-    fn read(&self, _data_width: BusWidth, _buffer: &'static mut [u8], _len: usize) -> ReturnCode {
-        ReturnCode::ENOSUPPORT
+    fn read(
+        &self,
+        _data_width: BusWidth,
+        buffer: &'static mut [u8],
+        _len: usize,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+        Err((ReturnCode::ENOSUPPORT, buffer))
     }
 
     fn set_client(&self, client: &'static dyn Client) {

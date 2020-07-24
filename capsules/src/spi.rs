@@ -104,7 +104,7 @@ impl<'a, S: SpiMasterDevice> Spi<'a, S> {
             self.kernel_write.take().unwrap(),
             self.kernel_read.take(),
             len,
-        );
+        ).expect ("spi device error");
     }
 }
 
@@ -330,7 +330,7 @@ impl<'a, S: SpiSlaveDevice> SpiSlave<'a, S> {
             });
         });
         self.spi_slave
-            .read_write_bytes(self.kernel_write.take(), self.kernel_read.take(), len);
+            .read_write_bytes(self.kernel_write.take(), self.kernel_read.take(), len).expect ("spi device error");
     }
 }
 

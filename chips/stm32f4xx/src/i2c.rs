@@ -6,6 +6,7 @@ use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::hil::i2c::{self, Error, I2CHwMasterClient, I2CMaster};
 use kernel::ClockInterface;
+use kernel::ReturnCode;
 
 use crate::rcc;
 
@@ -411,7 +412,13 @@ impl i2c::I2CMaster for I2C<'_> {
     fn disable(&self) {
         self.registers.cr1.modify(CR1::PE::CLEAR);
     }
-    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {
+    fn write_read(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        write_len: u8,
+        read_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         if self.status.get() == I2CStatus::Idle {
             self.reset();
             self.status.set(I2CStatus::WritingReading);
@@ -420,9 +427,17 @@ impl i2c::I2CMaster for I2C<'_> {
             self.tx_len.set(write_len);
             self.rx_len.set(read_len);
             self.start_write();
+            Ok(())
+        } else {
+            Err((ReturnCode::EBUSY, data))
         }
     }
-    fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
+    fn write(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         if self.status.get() == I2CStatus::Idle {
             self.reset();
             self.status.set(I2CStatus::Writing);
@@ -430,9 +445,17 @@ impl i2c::I2CMaster for I2C<'_> {
             self.buffer.replace(data);
             self.tx_len.set(len);
             self.start_write();
+            Ok(())
+        } else {
+            Err((ReturnCode::EBUSY, data))
         }
     }
-    fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {
+    fn read(
+        &self,
+        addr: u8,
+        buffer: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         if self.status.get() == I2CStatus::Idle {
             self.reset();
             self.status.set(I2CStatus::Reading);
@@ -440,6 +463,9 @@ impl i2c::I2CMaster for I2C<'_> {
             self.buffer.replace(buffer);
             self.rx_len.set(len);
             self.start_read();
+            Ok(())
+        } else {
+            Err((ReturnCode::EBUSY, buffer))
         }
     }
 }

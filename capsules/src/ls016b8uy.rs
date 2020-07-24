@@ -50,6 +50,7 @@ static NOP: Command = Command {
     delay: 0,
 };
 
+#[allow(dead_code)]
 static SLEEP_IN: Command = Command {
     id: 0x10,
     parameters: None,
@@ -80,6 +81,7 @@ static WRITE_RAM: Command = Command {
     delay: 0,
 };
 
+#[allow(dead_code)]
 static READ_RAM: Command = Command {
     id: 0x2E,
     parameters: None,
@@ -116,6 +118,7 @@ static IDLE_OFF: Command = Command {
     delay: 20,
 };
 
+#[allow(dead_code)]
 static IDLE_ON: Command = Command {
     id: 0x39,
     parameters: None,
@@ -226,24 +229,24 @@ macro_rules! default_parameters_sequence {
     }
 }
 
-static INIT_SEQUENCE: [SendCommand; 9] = default_parameters_sequence!(
+static INIT_SEQUENCE: [SendCommand; 23] = default_parameters_sequence!(
     &VSYNC_OUTPUT,
     &COLOR_MODE,
-    // &PANEL_SETTING1,
-    // &PANEL_SETTING2,
-    // &PANEL_V_PORCH,
-    // &PANEL_IDLE_V_PORCH,
-    // &PANEL_TIMING1,
-    // &PANEL_TIMING2,
-    // &PANEL_TIMING3,
-    // &PANEL_TIMING4,
-    // &PANEL_POWER,
-    // &OSCILLATOR,
+    &PANEL_SETTING1,
+    &PANEL_SETTING2,
+    &PANEL_V_PORCH,
+    &PANEL_IDLE_V_PORCH,
+    &PANEL_TIMING1,
+    &PANEL_TIMING2,
+    &PANEL_TIMING3,
+    &PANEL_TIMING4,
+    &PANEL_POWER,
+    &OSCILLATOR,
     &GVDD,
-    // &RELOAD_MTP_VCOMH,
-    // &OPAMP,
-    // &TEARING_EFFECT,
-    // &PANEL_SETTING_LOCK,
+    &RELOAD_MTP_VCOMH,
+    &OPAMP,
+    &TEARING_EFFECT,
+    &PANEL_SETTING_LOCK,
     &SLEEP_OUT,
     &NORMAL_DISPLAY,
     &CASET,
@@ -458,7 +461,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: no write buffer"),
             |buffer| {
                 self.status.set(Status::SendParametersSlice);
-                self.bus.write(BusWidth::Bits16LE, buffer, len / 2);
+                self.bus.write(BusWidth::Bits16BE, buffer, len / 2);
             },
         );
     }

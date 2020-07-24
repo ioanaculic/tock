@@ -62,7 +62,7 @@ impl<'a, Spi: hil::spi::SpiMaster> MuxSpiMaster<'a, Spi> {
                         self.inflight.set(node);
                         node.txbuffer.take().map(|txbuffer| {
                             let rxbuffer = node.rxbuffer.take();
-                            self.spi.read_write_bytes(txbuffer, rxbuffer, len);
+                            self.spi.read_write_bytes(txbuffer, rxbuffer, len).expect ("spi device error");
                         });
                     }
                     Op::SetPolarity(pol) => {
@@ -155,12 +155,16 @@ impl<Spi: hil::spi::SpiMaster> hil::spi::SpiMasterDevice for VirtualSpiMasterDev
         write_buffer: &'static mut [u8],
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> ReturnCode {
-        self.txbuffer.replace(write_buffer);
-        self.rxbuffer.put(read_buffer);
-        self.operation.set(Op::ReadWriteBytes(len));
-        self.mux.do_next_op();
-        ReturnCode::SUCCESS
+    ) -> Result<(), (ReturnCode, &'static mut [u8], Option<&'static mut [u8]>)> {
+        if self.operation.get() == Op::Idle {
+            self.txbuffer.replace(write_buffer);
+            self.rxbuffer.put(read_buffer);
+            self.operation.set(Op::ReadWriteBytes(len));
+            self.mux.do_next_op();
+            Ok(())
+        } else {
+            Err((ReturnCode::EBUSY, write_buffer, read_buffer))
+        }
     }
 
     fn set_polarity(&self, cpol: hil::spi::ClockPolarity) {
@@ -239,7 +243,14 @@ impl<Spi: hil::spi::SpiSlave> hil::spi::SpiSlaveDevice for VirtualSpiSlaveDevice
         write_buffer: Option<&'static mut [u8]>,
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> ReturnCode {
+    ) -> Result<
+        (),
+        (
+            ReturnCode,
+            Option<&'static mut [u8]>,
+            Option<&'static mut [u8]>,
+        ),
+    > {
         self.spi.read_write_bytes(write_buffer, read_buffer, len)
     }
 

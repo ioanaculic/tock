@@ -104,14 +104,6 @@ unsafe fn setup_dma() {
     cortexm4::nvic::Nvic::new(Dma1Peripheral::USART2_RX.get_stream_irqn()).enable();
 }
 
-unsafe fn delay(ms: usize) {
-    for _i in 0..ms * 10_000 {
-        llvm_asm!(
-            "nop"
-        : : : : "volatile" );
-    }
-}
-
 /// Helper function called during bring-up that configures multiplexed I/O.
 unsafe fn set_pin_primary_functions() {
     use kernel::hil::gpio::Configure;

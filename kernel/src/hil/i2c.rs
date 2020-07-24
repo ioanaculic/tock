@@ -1,5 +1,6 @@
 //! Interface for I2C master and slave peripherals.
 
+use crate::returncode::ReturnCode;
 use core::fmt;
 use core::fmt::{Display, Formatter};
 
@@ -25,6 +26,9 @@ pub enum Error {
     /// The requested operation wasn't supported.
     NotSupported,
 
+    /// I2C device error
+    DeviceError,
+
     /// No error occured and the command completed successfully.
     CommandComplete,
 }
@@ -37,6 +41,7 @@ impl Display for Error {
             Error::ArbitrationLost => "I2C Bus Arbitration Lost",
             Error::Overrun => "I2C receive overrun",
             Error::NotSupported => "I2C/SMBus command not supported",
+            Error::DeviceError => "I2C/SMBus device error (possible busy)",
             Error::CommandComplete => "I2C Command Completed",
         };
         write!(fmt, "{}", display_str)
@@ -55,9 +60,25 @@ pub trait I2CMaster {
     fn set_master_client(&self, master_client: &'static dyn I2CHwMasterClient);
     fn enable(&self);
     fn disable(&self);
-    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8);
-    fn write(&self, addr: u8, data: &'static mut [u8], len: u8);
-    fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8);
+    fn write_read(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        write_len: u8,
+        read_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
+    fn write(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
+    fn read(
+        &self,
+        addr: u8,
+        buffer: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
 }
 
 /// Interface for an SMBus Master hardware driver.
@@ -129,8 +150,16 @@ pub trait I2CSlave {
     fn enable(&self);
     fn disable(&self);
     fn set_address(&self, addr: u8);
-    fn write_receive(&self, data: &'static mut [u8], max_len: u8);
-    fn read_send(&self, data: &'static mut [u8], max_len: u8);
+    fn write_receive(
+        &self,
+        data: &'static mut [u8],
+        max_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
+    fn read_send(
+        &self,
+        data: &'static mut [u8],
+        max_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
     fn listen(&self);
 }
 
@@ -176,9 +205,22 @@ pub trait I2CHwSlaveClient {
 pub trait I2CDevice {
     fn enable(&self);
     fn disable(&self);
-    fn write_read(&self, data: &'static mut [u8], write_len: u8, read_len: u8);
-    fn write(&self, data: &'static mut [u8], len: u8);
-    fn read(&self, buffer: &'static mut [u8], len: u8);
+    fn write_read(
+        &self,
+        data: &'static mut [u8],
+        write_len: u8,
+        read_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
+    fn write(
+        &self,
+        data: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
+    fn read(
+        &self,
+        buffer: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])>;
 }
 
 pub trait SMBusDevice: I2CDevice {
