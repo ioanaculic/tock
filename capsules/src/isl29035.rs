@@ -82,7 +82,7 @@ impl<'a, A: time::Alarm<'a>> Isl29035<'a, A> {
                 // ADC resolution 8-bit (bits 2,3)
                 // Other bits are reserved
                 buf[2] = 0b00001001;
-                self.i2c.write(buf, 3).expect ("isl29035: i2c write error");
+                self.i2c.write(buf, 3).expect("isl29035: i2c write error");
                 self.state.set(State::Enabling);
             });
         }
@@ -107,7 +107,7 @@ impl<'a, A: time::Alarm<'a>> time::AlarmClient for Isl29035<'a, A> {
             self.i2c.enable();
 
             buffer[0] = 0x02 as u8;
-            self.i2c.write_read(buffer, 1, 2).expect ("i2c device error");
+            self.i2c.write_read(buffer, 1, 2).expect("i2c device error");
             self.state.set(State::ReadingLI);
         });
     }
@@ -141,7 +141,7 @@ impl<'a, A: time::Alarm<'a>> I2CClient for Isl29035<'a, A> {
                 let lux = (data * 4000) >> 8;
 
                 buffer[0] = 0;
-                self.i2c.write(buffer, 2).expect ("i2c device error");
+                self.i2c.write(buffer, 2).expect("i2c device error");
                 self.state.set(State::Disabling(lux));
             }
             State::Disabling(lux) => {

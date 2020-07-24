@@ -7,6 +7,7 @@ use kernel::common::registers::{register_bitfields, register_structs, ReadOnly, 
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::hil::i2c;
+use kernel::ReturnCode;
 
 pub static mut IOM0: Iom = Iom::new(IOM0_BASE);
 pub static mut IOM1: Iom = Iom::new(IOM1_BASE);
@@ -658,16 +659,35 @@ impl<'a> hil::i2c::I2CMaster for Iom<'a> {
         regs.submodctrl.write(SUBMODCTRL::SMOD1EN::CLEAR);
     }
 
-    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {
+    fn write_read(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        write_len: u8,
+        read_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         self.tx_rx(addr, data, write_len, read_len);
+        Ok(())
     }
 
-    fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
+    fn write(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         self.tx(addr, data, len);
+        Ok(())
     }
 
-    fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {
+    fn read(
+        &self,
+        addr: u8,
+        buffer: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         self.rx(addr, buffer, len);
+        Ok(())
     }
 }
 

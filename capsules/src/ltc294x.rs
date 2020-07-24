@@ -168,7 +168,7 @@ impl<'a> LTC294X<'a> {
             self.i2c.enable();
 
             // Address pointer automatically resets to the status register.
-            self.i2c.read(buffer, 1).expect ("i2c device error");
+            self.i2c.read(buffer, 1).expect("i2c device error");
             self.state.set(State::ReadStatus);
 
             ReturnCode::SUCCESS
@@ -187,7 +187,7 @@ impl<'a> LTC294X<'a> {
             buffer[0] = Registers::Control as u8;
             buffer[1] = ((int_pin_conf as u8) << 1) | (prescaler << 3) | ((vbat_alert as u8) << 6);
 
-            self.i2c.write(buffer, 2).expect ("i2c device error");
+            self.i2c.write(buffer, 2).expect("i2c device error");
             self.state.set(State::Done);
 
             ReturnCode::SUCCESS
@@ -203,7 +203,7 @@ impl<'a> LTC294X<'a> {
             buffer[1] = 0;
             buffer[2] = 0;
 
-            self.i2c.write(buffer, 3).expect ("i2c device error");
+            self.i2c.write(buffer, 3).expect("i2c device error");
             self.state.set(State::Done);
 
             ReturnCode::SUCCESS
@@ -218,7 +218,7 @@ impl<'a> LTC294X<'a> {
             buffer[1] = ((threshold & 0xFF00) >> 8) as u8;
             buffer[2] = (threshold & 0xFF) as u8;
 
-            self.i2c.write(buffer, 3).expect ("i2c device error");
+            self.i2c.write(buffer, 3).expect("i2c device error");
             self.state.set(State::Done);
 
             ReturnCode::SUCCESS
@@ -233,7 +233,7 @@ impl<'a> LTC294X<'a> {
             buffer[1] = ((threshold & 0xFF00) >> 8) as u8;
             buffer[2] = (threshold & 0xFF) as u8;
 
-            self.i2c.write(buffer, 3).expect ("i2c device error");
+            self.i2c.write(buffer, 3).expect("i2c device error");
             self.state.set(State::Done);
 
             ReturnCode::SUCCESS
@@ -247,7 +247,7 @@ impl<'a> LTC294X<'a> {
 
             // Read all of the first four registers rather than wasting
             // time writing an address.
-            self.i2c.read(buffer, 4).expect ("i2c device error");
+            self.i2c.read(buffer, 4).expect("i2c device error");
             self.state.set(State::ReadCharge);
 
             ReturnCode::SUCCESS
@@ -262,7 +262,7 @@ impl<'a> LTC294X<'a> {
                 self.buffer.take().map_or(ReturnCode::ENOMEM, |buffer| {
                     self.i2c.enable();
 
-                    self.i2c.read(buffer, 10).expect ("i2c device error");
+                    self.i2c.read(buffer, 10).expect("i2c device error");
                     self.state.set(State::ReadVoltage);
 
                     ReturnCode::SUCCESS
@@ -279,7 +279,7 @@ impl<'a> LTC294X<'a> {
             ChipModel::LTC2943 => self.buffer.take().map_or(ReturnCode::ENOMEM, |buffer| {
                 self.i2c.enable();
 
-                self.i2c.read(buffer, 16).expect ("i2c device error");
+                self.i2c.read(buffer, 16).expect("i2c device error");
                 self.state.set(State::ReadCurrent);
 
                 ReturnCode::SUCCESS
@@ -295,7 +295,7 @@ impl<'a> LTC294X<'a> {
 
             // Read both the status and control register rather than
             // writing an address.
-            self.i2c.read(buffer, 2).expect ("i2c device error");
+            self.i2c.read(buffer, 2).expect("i2c device error");
             self.state.set(State::ReadShutdown);
 
             ReturnCode::SUCCESS
@@ -378,7 +378,7 @@ impl i2c::I2CClient for LTC294X<'_> {
                 // Write the control register back but with a 1 in the shutdown
                 // bit.
                 buffer[0] = Registers::Control as u8;
-                self.i2c.write(buffer, 2).expect ("i2c device error");
+                self.i2c.write(buffer, 2).expect("i2c device error");
                 self.state.set(State::Done);
             }
             State::Done => {

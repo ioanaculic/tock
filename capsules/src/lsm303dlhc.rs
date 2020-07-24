@@ -315,7 +315,9 @@ impl<'a> Lsm303dlhcI2C<'a> {
         self.buffer.take().map(|buf| {
             // turn on i2c to send commands
             buf[0] = 0x0F;
-            self.i2c_magnetometer.write_read(buf, 1, 1).expect ("i2c device error");
+            self.i2c_magnetometer
+                .write_read(buf, 1, 1)
+                .expect("i2c device error");
         });
     }
 
@@ -330,7 +332,9 @@ impl<'a> Lsm303dlhcI2C<'a> {
                     + CTRL_REG1::YEN::SET
                     + CTRL_REG1::XEN::SET)
                     .value;
-                self.i2c_accelerometer.write(buf, 2).expect ("i2c device error");
+                self.i2c_accelerometer
+                    .write(buf, 2)
+                    .expect("i2c device error");
             });
         }
     }
@@ -347,7 +351,7 @@ impl<'a> Lsm303dlhcI2C<'a> {
                     + CTRL_REG4::HR.val(high_resolution as u8))
                 .value;
                 if let Err((_, buffer)) = self.i2c_accelerometer.write(buf, 2) {
-                    self.command_complete (buffer, Error::DeviceError)
+                    self.command_complete(buffer, Error::DeviceError)
                 }
             });
         }
@@ -359,7 +363,7 @@ impl<'a> Lsm303dlhcI2C<'a> {
             self.buffer.take().map(|buf| {
                 buf[0] = AccelerometerRegisters::OUT_X_L_A as u8 | REGISTER_AUTO_INCREMENT;
                 if let Err((_, buffer)) = self.i2c_accelerometer.write_read(buf, 1, 6) {
-                    self.command_complete (buffer, Error::DeviceError)
+                    self.command_complete(buffer, Error::DeviceError)
                 }
             });
         }
@@ -376,7 +380,7 @@ impl<'a> Lsm303dlhcI2C<'a> {
                 buf[0] = MagnetometerRegisters::CRA_REG_M as u8;
                 buf[1] = ((data_rate as u8) << 2) | if temperature { 1 << 7 } else { 0 };
                 if let Err((_, buffer)) = self.i2c_magnetometer.write(buf, 2) {
-                    self.command_complete (buffer, Error::DeviceError)
+                    self.command_complete(buffer, Error::DeviceError)
                 }
             });
         }
@@ -392,7 +396,7 @@ impl<'a> Lsm303dlhcI2C<'a> {
                 buf[1] = (range as u8) << 5;
                 buf[2] = 0;
                 if let Err((_, buffer)) = self.i2c_magnetometer.write(buf, 3) {
-                    self.command_complete (buffer, Error::DeviceError)
+                    self.command_complete(buffer, Error::DeviceError)
                 }
             });
         }
@@ -404,7 +408,7 @@ impl<'a> Lsm303dlhcI2C<'a> {
             self.buffer.take().map(|buf| {
                 buf[0] = MagnetometerRegisters::TEMP_OUT_H_M as u8;
                 if let Err((_, buffer)) = self.i2c_magnetometer.write_read(buf, 1, 2) {
-                    self.command_complete (buffer, Error::DeviceError)
+                    self.command_complete(buffer, Error::DeviceError)
                 }
             });
         }
@@ -416,7 +420,7 @@ impl<'a> Lsm303dlhcI2C<'a> {
             self.buffer.take().map(|buf| {
                 buf[0] = MagnetometerRegisters::OUT_X_H_M as u8;
                 if let Err((_, buffer)) = self.i2c_magnetometer.write_read(buf, 1, 6) {
-                    self.command_complete (buffer, Error::DeviceError)
+                    self.command_complete(buffer, Error::DeviceError)
                 }
             });
         }

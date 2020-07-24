@@ -346,9 +346,16 @@ impl Spi<'_> {
         write_buffer: Option<&'static mut [u8]>,
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> ReturnCode {
+    ) -> Result<
+        (),
+        (
+            ReturnCode,
+            Option<&'static mut [u8]>,
+            Option<&'static mut [u8]>,
+        ),
+    > {
         if write_buffer.is_none() && read_buffer.is_none() {
-            return ReturnCode::EINVAL;
+            return Err((ReturnCode::EINVAL, write_buffer, read_buffer));
         }
 
         if self.transfers.get() == 0 {
@@ -395,9 +402,9 @@ impl Spi<'_> {
                 self.registers.cr2.modify(CR2::TXEIE::SET);
             });
 
-            ReturnCode::SUCCESS
+            Ok(())
         } else {
-            ReturnCode::EBUSY
+            Err((ReturnCode::EBUSY, write_buffer, read_buffer))
         }
     }
 }
@@ -463,13 +470,23 @@ impl spi::SpiMaster for Spi<'_> {
         write_buffer: &'static mut [u8],
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> ReturnCode {
+    ) -> Result<(), (ReturnCode, &'static mut [u8], Option<&'static mut [u8]>)> {
         // If busy, don't start
         if self.is_busy() {
-            return ReturnCode::EBUSY;
+            return Err((ReturnCode::EBUSY, write_buffer, read_buffer));
         }
 
-        self.read_write_bytes(Some(write_buffer), read_buffer, len)
+        if let Err((code, write_buffer, read_buffer)) =
+            self.read_write_bytes(Some(write_buffer), read_buffer, len)
+        {
+            if let Some(write_buffer) = write_buffer {
+                Err((code, write_buffer, read_buffer))
+            } else {
+                panic!("spi write_buffer error");
+            }
+        } else {
+            Ok(())
+        }
     }
 
     /// We *only* support 1Mhz. If `rate` is set to any value other than

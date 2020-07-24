@@ -341,10 +341,15 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
         self.buffer.take().map_or_else(
             || panic!("st77xx: send command has no buffer"),
             |buffer| {
-                if let Err((_, buffer)) = self.bus
-                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0) {
-                        self.command_complete (buffer, 0);
-                    }
+                if let Err((_, buffer)) = self.bus.write_addr(
+                    BusWidth::Bits8,
+                    cmd.id as usize,
+                    BusWidth::Bits8,
+                    buffer,
+                    0,
+                ) {
+                    self.command_complete(buffer, 0);
+                }
             },
         );
     }
@@ -358,11 +363,15 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
         self.buffer.take().map_or_else(
             || panic!("st77xx: send command has no buffer"),
             |buffer| {
-                if let Err((_, buffer)) =
-                self.bus
-                    .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0) {
-                        self.command_complete (buffer, 0);
-                    }
+                if let Err((_, buffer)) = self.bus.write_addr(
+                    BusWidth::Bits8,
+                    cmd.id as usize,
+                    BusWidth::Bits8,
+                    buffer,
+                    0,
+                ) {
+                    self.command_complete(buffer, 0);
+                }
             },
         );
     }
@@ -382,9 +391,8 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                     if let Some(dc) = self.dc {
                         dc.set();
                     }
-                    if let Err((_, buffer)) =
-                    self.bus.write(BusWidth::Bits8, buffer, len) {
-                        self.command_complete (buffer, 0);
+                    if let Err((_, buffer)) = self.bus.write(BusWidth::Bits8, buffer, len) {
+                        self.command_complete(buffer, 0);
                     }
                 },
             );
@@ -401,9 +409,8 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                 if let Some(dc) = self.dc {
                     dc.set();
                 }
-                if let Err((_, buffer)) =
-                self.bus.write(BusWidth::Bits16BE, buffer, len / 2) {
-                    self.command_complete (buffer, 0);
+                if let Err((_, buffer)) = self.bus.write(BusWidth::Bits16BE, buffer, len / 2) {
+                    self.command_complete(buffer, 0);
                 }
             },
         );

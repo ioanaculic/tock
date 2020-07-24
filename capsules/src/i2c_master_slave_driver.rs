@@ -206,7 +206,7 @@ impl hil::i2c::I2CHwSlaveClient for I2CMasterSlaveDriver<'_> {
         // just let the hardware layer have it. But, if it does happen
         // we can respond.
         self.slave_buffer1.take().map(|buffer| {
-            hil::i2c::I2CSlave::write_receive(self.i2c, buffer, 255).expect ("i2c device error");
+            hil::i2c::I2CSlave::write_receive(self.i2c, buffer, 255).expect("i2c device error");
         });
     }
 }

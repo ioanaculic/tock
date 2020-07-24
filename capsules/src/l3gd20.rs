@@ -216,7 +216,9 @@ impl<'a> L3gd20Spi<'a> {
         self.txbuffer.take().map(|buf| {
             buf[0] = L3GD20_REG_WHO_AM_I | 0x80;
             buf[1] = 0x00;
-            self.spi.read_write_bytes(buf, self.rxbuffer.take(), 2).expect ("spi device error");
+            self.spi
+                .read_write_bytes(buf, self.rxbuffer.take(), 2)
+                .expect("spi device error");
         });
         false
     }
@@ -226,7 +228,9 @@ impl<'a> L3gd20Spi<'a> {
         self.txbuffer.take().map(|buf| {
             buf[0] = L3GD20_REG_CTRL_REG1;
             buf[1] = 0x0F;
-            self.spi.read_write_bytes(buf, None, 2).expect ("spi device error");
+            self.spi
+                .read_write_bytes(buf, None, 2)
+                .expect("spi device error");
         });
     }
 
@@ -236,7 +240,9 @@ impl<'a> L3gd20Spi<'a> {
         self.txbuffer.take().map(|buf| {
             buf[0] = L3GD20_REG_CTRL_REG5;
             buf[1] = if enabled { 1 } else { 0 } << 4;
-            self.spi.read_write_bytes(buf, None, 2).expect ("spi device error");
+            self.spi
+                .read_write_bytes(buf, None, 2)
+                .expect("spi device error");
         });
     }
 
@@ -247,7 +253,9 @@ impl<'a> L3gd20Spi<'a> {
         self.txbuffer.take().map(|buf| {
             buf[0] = L3GD20_REG_CTRL_REG2;
             buf[1] = (mode & 0x03) << 4 | (divider & 0x0F);
-            self.spi.read_write_bytes(buf, None, 2).expect ("spi device error");
+            self.spi
+                .read_write_bytes(buf, None, 2)
+                .expect("spi device error");
         });
     }
 
@@ -257,7 +265,9 @@ impl<'a> L3gd20Spi<'a> {
         self.txbuffer.take().map(|buf| {
             buf[0] = L3GD20_REG_CTRL_REG4;
             buf[1] = (scale & 0x03) << 4;
-            self.spi.read_write_bytes(buf, None, 2).expect ("spi device error");
+            self.spi
+                .read_write_bytes(buf, None, 2)
+                .expect("spi device error");
         });
     }
 
@@ -271,7 +281,9 @@ impl<'a> L3gd20Spi<'a> {
             buf[4] = 0x00;
             buf[5] = 0x00;
             buf[6] = 0x00;
-            self.spi.read_write_bytes(buf, self.rxbuffer.take(), 7).expect ("spi device error");
+            self.spi
+                .read_write_bytes(buf, self.rxbuffer.take(), 7)
+                .expect("spi device error");
         });
     }
 
@@ -280,7 +292,9 @@ impl<'a> L3gd20Spi<'a> {
         self.txbuffer.take().map(|buf| {
             buf[0] = L3GD20_REG_OUT_TEMP | 0x80;
             buf[1] = 0x00;
-            self.spi.read_write_bytes(buf, self.rxbuffer.take(), 2).expect ("spi device error");
+            self.spi
+                .read_write_bytes(buf, self.rxbuffer.take(), 2)
+                .expect("spi device error");
         });
     }
 

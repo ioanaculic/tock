@@ -177,7 +177,14 @@ pub trait SpiSlave {
         write_buffer: Option<&'static mut [u8]>,
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> Result<(), (ReturnCode, Option<&'static mut [u8]>, Option<&'static mut [u8]>)>;
+    ) -> Result<
+        (),
+        (
+            ReturnCode,
+            Option<&'static mut [u8]>,
+            Option<&'static mut [u8]>,
+        ),
+    >;
 
     fn set_clock(&self, polarity: ClockPolarity);
     fn get_clock(&self) -> ClockPolarity;

@@ -8,11 +8,9 @@ use kernel::static_init_half;
 
 // Setup static space for the objects.
 #[macro_export]
-macro_rules! spi_memory_component_helper {
+macro_rules! spi_bus_component_helper {
     ($S:ty, $select:expr, $spi_mux: expr) => {{
         use capsules::bus::SpiBus;
-        use capsules::virtual_alarm::VirtualMuxAlarm;
-        use capsules::virtual_spi::VirtualSpiMasterDevice;
         use core::mem::MaybeUninit;
         let mem_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
             components::spi::SpiComponent::new($spi_mux, $select)

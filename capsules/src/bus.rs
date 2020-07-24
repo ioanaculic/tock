@@ -73,7 +73,7 @@ impl<'a> Bus for SpiBus<'a> {
     ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         match addr_width {
             BusWidth::Bits8 => self.read_write_buffer.take().map_or_else(
-                || panic! ("bus::read_addr: spi did not return the read write buffer"),
+                || panic!("bus::read_addr: spi did not return the read write buffer"),
                 move |write_buffer| {
                     if write_buffer.len() > len && write_buffer.len() > 0 && buffer.len() > len {
                         write_buffer[0] = addr as u8;
@@ -116,7 +116,7 @@ impl<'a> Bus for SpiBus<'a> {
         // endianess does not matter as the buffer is read as is
         let bytes = bus_width_in_bytes(&data_width);
         self.read_write_buffer.take().map_or_else(
-            || panic! ("bus::read: spi did not return the read write buffer"),
+            || panic!("bus::read: spi did not return the read write buffer"),
             move |write_buffer| {
                 if write_buffer.len() >= len * bytes
                     && write_buffer.len() > 0

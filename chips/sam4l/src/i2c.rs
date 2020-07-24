@@ -18,6 +18,7 @@ use kernel::common::registers::{register_bitfields, FieldValue, ReadOnly, ReadWr
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ClockInterface;
+use kernel::ReturnCode;
 
 // Listing of all registers related to the TWIM peripheral.
 // Section 27.9 of the datasheet
@@ -1330,7 +1331,12 @@ impl hil::i2c::I2CMaster for I2CHw {
         self.disable_interrupts(twim);
     }
 
-    fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
+    fn write(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         I2CHw::write(
             self,
             addr,
@@ -1338,9 +1344,15 @@ impl hil::i2c::I2CMaster for I2CHw {
             data,
             len,
         );
+        Ok(())
     }
 
-    fn read(&self, addr: u8, data: &'static mut [u8], len: u8) {
+    fn read(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         I2CHw::read(
             self,
             addr,
@@ -1348,10 +1360,18 @@ impl hil::i2c::I2CMaster for I2CHw {
             data,
             len,
         );
+        Ok(())
     }
 
-    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {
-        I2CHw::write_read(self, addr, data, write_len, read_len)
+    fn write_read(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        write_len: u8,
+        read_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+        I2CHw::write_read(self, addr, data, write_len, read_len);
+        Ok(())
     }
 }
 
@@ -1409,12 +1429,22 @@ impl hil::i2c::I2CSlave for I2CHw {
         self.slave_set_address(addr);
     }
 
-    fn write_receive(&self, data: &'static mut [u8], max_len: u8) {
+    fn write_receive(
+        &self,
+        data: &'static mut [u8],
+        max_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         self.slave_write_receive(data, max_len);
+        Ok(())
     }
 
-    fn read_send(&self, data: &'static mut [u8], max_len: u8) {
+    fn read_send(
+        &self,
+        data: &'static mut [u8],
+        max_len: u8,
+    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
         self.slave_read_send(data, max_len);
+        Ok(())
     }
 
     fn listen(&self) {

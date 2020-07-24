@@ -392,14 +392,7 @@ impl spi::SpiMaster for Spi<'_> {
         write_buffer: &'static mut [u8],
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> Result<
-    (),
-    (
-        ReturnCode,
-        &'static mut [u8],
-        Option<&'static mut [u8]>,
-    ),
-> {
+    ) -> Result<(), (ReturnCode, &'static mut [u8], Option<&'static mut [u8]>)> {
         // If busy, don't start
         if self.is_busy() {
             return Err((ReturnCode::EBUSY, write_buffer, read_buffer));

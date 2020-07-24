@@ -134,7 +134,7 @@ impl<'a> MAX17205<'a> {
 
             buffer[0] = Registers::Status as u8;
 
-            self.i2c_lower.write(buffer, 2).expect ("i2c device error");
+            self.i2c_lower.write(buffer, 2).expect("i2c device error");
             self.state.set(State::SetupReadStatus);
 
             ReturnCode::SUCCESS
@@ -188,7 +188,7 @@ impl<'a> MAX17205<'a> {
             self.i2c_upper.enable();
 
             buffer[0] = Registers::NRomID as u8;
-            self.i2c_upper.write(buffer, 1).expect ("i2c device error");
+            self.i2c_upper.write(buffer, 1).expect("i2c device error");
             self.state.set(State::SetupReadRomID);
 
             ReturnCode::SUCCESS
@@ -267,7 +267,7 @@ impl i2c::I2CClient for MAX17205<'_> {
             }
             State::SetupReadCoulomb => {
                 // Write of voltage memory address complete, now issue read
-                self.i2c_lower.read(buffer, 2).expect ("i2c device error");
+                self.i2c_lower.read(buffer, 2).expect("i2c device error");
                 self.state.set(State::ReadCoulomb);
             }
             State::ReadCoulomb => {
@@ -290,7 +290,7 @@ impl i2c::I2CClient for MAX17205<'_> {
             }
             State::SetupReadVolt => {
                 // Write of voltage memory address complete, now issue read
-                self.i2c_lower.read(buffer, 2).expect ("i2c device error");
+                self.i2c_lower.read(buffer, 2).expect("i2c device error");
                 self.state.set(State::ReadVolt);
             }
             State::ReadVolt => {
@@ -304,14 +304,14 @@ impl i2c::I2CClient for MAX17205<'_> {
                 // Setup read capacity
                 self.buffer.take().map(|selfbuf| {
                     selfbuf[0] = ((Registers::Current as u8) & 0xFF) as u8;
-                    self.i2c_lower.write(selfbuf, 1).expect ("i2c device error");
+                    self.i2c_lower.write(selfbuf, 1).expect("i2c device error");
 
                     self.state.set(State::SetupReadCurrent);
                 });
             }
             State::SetupReadCurrent => {
                 // Now issue read
-                self.i2c_lower.read(buffer, 2).expect ("i2c device error");
+                self.i2c_lower.read(buffer, 2).expect("i2c device error");
                 self.state.set(State::ReadCurrent);
             }
             State::ReadCurrent => {
@@ -331,7 +331,7 @@ impl i2c::I2CClient for MAX17205<'_> {
                 self.state.set(State::Idle);
             }
             State::SetupReadRomID => {
-                self.i2c_upper.read(buffer, 8).expect ("i2c device error");
+                self.i2c_upper.read(buffer, 8).expect("i2c device error");
                 self.state.set(State::ReadRomID);
             }
             State::ReadRomID => {

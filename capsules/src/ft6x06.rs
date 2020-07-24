@@ -182,7 +182,7 @@ impl<'a> gpio::Client for Ft6x06<'a> {
 
             buffer[0] = Registers::REG_GEST_ID as u8;
             if let Err((_, buffer)) = self.i2c.write_read(buffer, 1, 15) {
-                self.command_complete (buffer, Error::DeviceError);
+                self.command_complete(buffer, Error::DeviceError);
             }
         });
     }

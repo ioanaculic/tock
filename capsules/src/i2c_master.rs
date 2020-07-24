@@ -75,10 +75,10 @@ impl<I: 'static + i2c::I2CMaster> I2CMasterDriver<I> {
                             Cmd::WriteRead => self.i2c.write_read(addr, buffer, wlen, rlen),
                         } {
                             Err((code, buffer)) => {
-                                self.buf.replace (buffer);
+                                self.buf.replace(buffer);
                                 code
                             }
-                            Ok(()) => ReturnCode::SUCCESS
+                            Ok(()) => ReturnCode::SUCCESS,
                         }
                     });
                     // buffer has not been returned by I2C

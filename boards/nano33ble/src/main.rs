@@ -257,18 +257,26 @@ pub unsafe fn reset_handler() {
         nrf52840::pinmux::Pinmux::new(SPI_CLK as u32),
     );
 
-    let tft = components::st7735::ST7735Component::new(mux_alarm).finalize(
-        components::st7735_component_helper!(
+    let bus =
+        components::bus::SpiBusComponent::new().finalize(components::spi_bus_component_helper!(
             // spi type
             nrf52840::spi::SPIM,
             // chip select
             &nrf52840::gpio::PORT[GPIO_D4],
             // spi mux
-            spi_mux,
+            spi_mux
+        ));
+
+    let tft = components::st77xx::ST77XXComponent::new(mux_alarm).finalize(
+        components::st77xx_component_helper!(
+            // screen
+            &capsules::st77xx::ST7735,
+            // bus
+            bus,
             // timer type
             nrf52::rtc::Rtc,
             // dc
-            &nrf52840::gpio::PORT[GPIO_D3],
+            Some(&nrf52840::gpio::PORT[GPIO_D3]),
             // reset
             &nrf52840::gpio::PORT[GPIO_D2]
         ),

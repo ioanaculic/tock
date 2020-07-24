@@ -90,15 +90,18 @@ impl<'a> MuxI2C<'a> {
             mnode.map(|node| {
                 node.buffer.take().map(|buf| {
                     match node.operation.get() {
-                        Op::Write(len) => if let Err((_, buf)) = self.i2c.write(node.addr, buf, len) {
-                            self.command_complete(buf, Error::DeviceError);
-                        },
-                        Op::Read(len) => if let Err((_, buf)) = self.i2c.read(node.addr, buf, len) {
-                            self.command_complete(buf, Error::DeviceError);
-                        },
+                        Op::Write(len) => {
+                            if let Err((_, buf)) = self.i2c.write(node.addr, buf, len) {
+                                self.command_complete(buf, Error::DeviceError);
+                            }
+                        }
+                        Op::Read(len) => {
+                            if let Err((_, buf)) = self.i2c.read(node.addr, buf, len) {
+                                self.command_complete(buf, Error::DeviceError);
+                            }
+                        }
                         Op::WriteRead(wlen, rlen) => {
-                            if let Err((_, buf)) = self.i2c.write_read(node.addr, buf, wlen, rlen)
-                            {
+                            if let Err((_, buf)) = self.i2c.write_read(node.addr, buf, wlen, rlen) {
                                 self.command_complete(buf, Error::DeviceError);
                             }
                         }
@@ -416,10 +419,10 @@ impl<'a> i2c::SMBusDevice for SMBusDevice<'a> {
         read_len: u8,
     ) -> Result<(), (Error, &'static mut [u8])> {
         // if self.operation.get() == Op::Idle {
-            self.buffer.replace(data);
-            self.operation.set(Op::WriteRead(write_len, read_len));
-            self.mux.do_next_op();
-            Ok(())
+        self.buffer.replace(data);
+        self.operation.set(Op::WriteRead(write_len, read_len));
+        self.mux.do_next_op();
+        Ok(())
         // } else {
         //     Err((ReturnCode::EBUSY, data))
         // }
@@ -431,10 +434,10 @@ impl<'a> i2c::SMBusDevice for SMBusDevice<'a> {
         len: u8,
     ) -> Result<(), (Error, &'static mut [u8])> {
         // if self.operation.get() == Op::Idle {
-            self.buffer.replace(data);
-            self.operation.set(Op::Write(len));
-            self.mux.do_next_op();
-            Ok(())
+        self.buffer.replace(data);
+        self.operation.set(Op::Write(len));
+        self.mux.do_next_op();
+        Ok(())
         // } else {
         //     Err((ReturnCode::EBUSY, data))
         // }
@@ -446,10 +449,10 @@ impl<'a> i2c::SMBusDevice for SMBusDevice<'a> {
         len: u8,
     ) -> Result<(), (Error, &'static mut [u8])> {
         // if self.operation.get() == Op::Idle {
-            self.buffer.replace(buffer);
-            self.operation.set(Op::Read(len));
-            self.mux.do_next_op();
-            Ok(())
+        self.buffer.replace(buffer);
+        self.operation.set(Op::Read(len));
+        self.mux.do_next_op();
+        Ok(())
         // } else {
         //     Err((ReturnCode::EBUSY, buffer))
         // }

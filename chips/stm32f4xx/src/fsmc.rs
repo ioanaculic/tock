@@ -378,11 +378,11 @@ impl Bus for Fsmc {
                         let data = self.read_reg();
                         for byte in 0..bytes {
                             buffer[bytes * pos
-                                    + match data_width {
-                                        BusWidth::Bits8 | BusWidth::Bits16LE => byte,
-                                        BusWidth::Bits16BE => (bytes - byte - 1),
-                                        _ => panic!("fsmc bus error"),
-                                    }] = (data >> (8 * byte)) as u8;
+                                + match data_width {
+                                    BusWidth::Bits8 | BusWidth::Bits16LE => byte,
+                                    BusWidth::Bits16BE => (bytes - byte - 1),
+                                    _ => panic!("fsmc bus error"),
+                                }] = (data >> (8 * byte)) as u8;
                         }
                     }
                     self.buffer.replace(buffer);
