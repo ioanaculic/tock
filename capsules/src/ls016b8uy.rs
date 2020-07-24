@@ -25,8 +25,8 @@
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
+use kernel::hil::bus::{self, BusWidth};
 use kernel::hil::gpio;
-use kernel::hil::memory_async::{self, BusWidth};
 use kernel::hil::screen::{
     self, ScreenClient, ScreenPixelFormat, ScreenRotation, ScreenSetupClient,
 };
@@ -291,7 +291,7 @@ pub enum SendCommand {
 }
 
 pub struct LS016B8UY<'a, A: Alarm<'a>> {
-    mem: &'a dyn memory_async::Memory,
+    bus: &'a dyn bus::Bus,
     alarm: &'a A,
     reset: &'a dyn gpio::Pin,
     status: Cell<Status>,
@@ -316,7 +316,7 @@ pub struct LS016B8UY<'a, A: Alarm<'a>> {
 
 impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
     pub fn new(
-        mem: &'a dyn memory_async::Memory,
+        bus: &'a dyn bus::Bus,
         alarm: &'a A,
         reset: &'a dyn gpio::Pin,
         buffer: &'static mut [u8],
@@ -327,7 +327,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             alarm: alarm,
 
             reset: reset,
-            mem: mem,
+            bus: bus,
 
             callback: OptionalCell::empty(),
 
@@ -414,7 +414,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: send command has no buffer"),
             |buffer| {
                 // buffer[0] = cmd.id;
-                self.mem
+                self.bus
                     .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
             },
         );
@@ -427,7 +427,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: send command has no buffer"),
             |buffer| {
                 // buffer[0] = cmd.id;
-                self.mem
+                self.bus
                     .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
             },
         );
@@ -445,7 +445,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
                             buffer[i - position] = buffer[i];
                         }
                     }
-                    self.mem.write(BusWidth::Bits8, buffer, len);
+                    self.bus.write(BusWidth::Bits8, buffer, len);
                 },
             );
         } else {
@@ -458,7 +458,7 @@ impl<'a, A: Alarm<'a>> LS016B8UY<'a, A> {
             || panic!("ls016b8uy: no write buffer"),
             |buffer| {
                 self.status.set(Status::SendParametersSlice);
-                self.mem.write(BusWidth::Bits16, buffer, len / 2);
+                self.bus.write(BusWidth::Bits16LE, buffer, len / 2);
             },
         );
     }
@@ -1027,7 +1027,7 @@ impl<'a, A: Alarm<'a>> time::AlarmClient for LS016B8UY<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> memory_async::Client for LS016B8UY<'a, A> {
+impl<'a, A: Alarm<'a>> bus::Client for LS016B8UY<'a, A> {
     fn command_complete(&self, buffer: &'static mut [u8], _len: usize) {
         if self.status.get() == Status::SendParametersSlice {
             self.write_buffer.replace(buffer);

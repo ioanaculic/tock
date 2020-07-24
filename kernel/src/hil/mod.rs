@@ -3,6 +3,7 @@
 pub mod adc;
 pub mod analog_comparator;
 pub mod ble_advertising;
+pub mod bus;
 pub mod crc;
 pub mod dac;
 pub mod digest;
@@ -14,7 +15,6 @@ pub mod gpio_async;
 pub mod i2c;
 pub mod led;
 pub mod log;
-pub mod memory_async;
 pub mod nonvolatile_storage;
 pub mod pwm;
 pub mod radio;

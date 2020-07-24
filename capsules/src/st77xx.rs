@@ -25,8 +25,8 @@
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
+use kernel::hil::bus::{self, BusWidth};
 use kernel::hil::gpio;
-use kernel::hil::memory_async::{self, BusWidth};
 use kernel::hil::screen::{
     self, ScreenClient, ScreenPixelFormat, ScreenRotation, ScreenSetupClient,
 };
@@ -201,7 +201,7 @@ pub enum SendCommand {
 }
 
 pub struct ST77XX<'a, A: Alarm<'a>> {
-    mem: &'a dyn memory_async::Memory,
+    bus: &'a dyn bus::Bus,
     alarm: &'a A,
     dc: Option<&'a dyn gpio::Pin>,
     reset: &'a dyn gpio::Pin,
@@ -229,7 +229,7 @@ pub struct ST77XX<'a, A: Alarm<'a>> {
 
 impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
     pub fn new(
-        mem: &'a dyn memory_async::Memory,
+        bus: &'a dyn bus::Bus,
         alarm: &'a A,
         dc: Option<&'a dyn gpio::Pin>,
         reset: &'a dyn gpio::Pin,
@@ -246,7 +246,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
 
             dc: dc,
             reset: reset,
-            mem: mem,
+            bus: bus,
 
             callback: OptionalCell::empty(),
 
@@ -338,7 +338,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
             || panic!("st77xx: send command has no buffer"),
             |buffer| {
                 // buffer[0] = cmd.id;
-                self.mem
+                self.bus
                     .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
             },
         );
@@ -354,7 +354,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
             || panic!("st77xx: send command has no buffer"),
             |buffer| {
                 // buffer[0] = cmd.id;
-                self.mem
+                self.bus
                     .write_addr(BusWidth::Bits8, cmd.id as usize, BusWidth::Bits8, buffer, 0);
             },
         );
@@ -375,7 +375,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                     if let Some(dc) = self.dc {
                         dc.set();
                     }
-                    self.mem.write(BusWidth::Bits8, buffer, len);
+                    self.bus.write(BusWidth::Bits8, buffer, len);
                 },
             );
         } else {
@@ -391,7 +391,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                 if let Some(dc) = self.dc {
                     dc.set();
                 }
-                self.mem.write(BusWidth::Bits16, buffer, len / 2);
+                self.bus.write(BusWidth::Bits16BE, buffer, len / 2);
             },
         );
     }
@@ -956,7 +956,7 @@ impl<'a, A: Alarm<'a>> time::AlarmClient for ST77XX<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> memory_async::Client for ST77XX<'a, A> {
+impl<'a, A: Alarm<'a>> bus::Client for ST77XX<'a, A> {
     fn command_complete(&self, buffer: &'static mut [u8], _len: usize) {
         if self.status.get() == Status::SendParametersSlice {
             self.write_buffer.replace(buffer);

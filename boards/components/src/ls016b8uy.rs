@@ -26,7 +26,7 @@ use capsules::ls016b8uy::LS016B8UY;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use core::mem::MaybeUninit;
 use kernel::component::Component;
-use kernel::hil::memory_async::Memory;
+use kernel::hil::bus::Bus;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
 use kernel::static_init_half;
@@ -34,14 +34,14 @@ use kernel::static_init_half;
 // Setup static space for the objects.
 #[macro_export]
 macro_rules! ls016b8u6_component_helper {
-    ($fsmc:expr, $A:ty, $reset:expr) => {{
+    ($bus:expr, $A:ty, $reset:expr) => {{
         use capsules::ls016b8uy::LS016B8UY;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;
         use core::mem::MaybeUninit;
-        use kernel::hil::memory_async::Memory;
+        use kernel::hil::bus::Bus;
         use kernel::hil::spi::{self, SpiMasterDevice};
-        let ls016b8uy_mem: &'static dyn Memory = $fsmc;
+        let ls016b8uy_mem: &'static dyn Bus = $bus;
         static mut ls016b8uy_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> =
             MaybeUninit::uninit();
         static mut ls016b8uy: MaybeUninit<LS016B8UY<'static, VirtualMuxAlarm<'static, $A>>> =
@@ -64,7 +64,7 @@ impl<A: 'static + time::Alarm<'static>> LS016B8UYComponent<A> {
 
 impl<A: 'static + time::Alarm<'static>> Component for LS016B8UYComponent<A> {
     type StaticInput = (
-        &'static dyn Memory,
+        &'static dyn Bus,
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
         &'static dyn kernel::hil::gpio::Pin,
         &'static mut MaybeUninit<LS016B8UY<'static, VirtualMuxAlarm<'static, A>>>,

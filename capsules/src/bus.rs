@@ -1,27 +1,27 @@
 use kernel::common::cells::OptionalCell;
 use kernel::debug;
-use kernel::hil::memory_async::{BusWidth, Client, Memory};
+use kernel::hil::bus::{Bus, BusWidth, Client};
 use kernel::hil::spi::{SpiMasterClient, SpiMasterDevice};
 use kernel::ReturnCode;
 
 fn bus_width_in_bytes(bus_width: BusWidth) -> usize {
     match bus_width {
         BusWidth::Bits8 => 1,
-        BusWidth::Bits16 => 2,
-        BusWidth::Bits32 => 3,
-        BusWidth::Bits64 => 4,
+        BusWidth::Bits16BE | BusWidth::Bits16LE => 2,
+        BusWidth::Bits32BE | BusWidth::Bits32LE => 3,
+        BusWidth::Bits64BE | BusWidth::Bits64LE => 4,
     }
 }
 
-pub struct SpiMemory<'a> {
+pub struct SpiBus<'a> {
     spi: &'a dyn SpiMasterDevice,
     read_write_buffer: OptionalCell<&'static mut [u8]>,
     client: OptionalCell<&'a dyn Client>,
 }
 
-impl<'a> SpiMemory<'a> {
-    pub fn new(spi: &'a dyn SpiMasterDevice) -> SpiMemory {
-        SpiMemory {
+impl<'a> SpiBus<'a> {
+    pub fn new(spi: &'a dyn SpiMasterDevice) -> SpiBus {
+        SpiBus {
             spi,
             read_write_buffer: OptionalCell::empty(),
             client: OptionalCell::empty(),
@@ -33,7 +33,7 @@ impl<'a> SpiMemory<'a> {
     }
 }
 
-impl<'a> Memory for SpiMemory<'a> {
+impl<'a> Bus for SpiBus<'a> {
     fn write_addr(
         &self,
         addr_width: BusWidth,
@@ -142,7 +142,7 @@ impl<'a> Memory for SpiMemory<'a> {
     }
 }
 
-impl<'a> SpiMasterClient for SpiMemory<'a> {
+impl<'a> SpiMasterClient for SpiBus<'a> {
     fn read_write_done(
         &self,
         write_buffer: &'static mut [u8],

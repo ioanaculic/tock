@@ -5,7 +5,7 @@ use kernel::common::deferred_call::DeferredCall;
 use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::debug;
-use kernel::hil::memory_async::{BusWidth, Client, Memory};
+use kernel::hil::bus::{Bus, BusWidth, Client};
 use kernel::{ClockInterface, ReturnCode};
 
 use crate::deferred_calls::DeferredCallTask;
@@ -144,12 +144,12 @@ struct FsmcBank {
     ram: ReadWrite<u16>,
 }
 
-fn bus_width_in_bytes(bus_width: BusWidth) -> usize {
+fn bus_width_in_bytes(bus_width: &BusWidth) -> usize {
     match bus_width {
         BusWidth::Bits8 => 1,
-        BusWidth::Bits16 => 2,
-        BusWidth::Bits32 => 3,
-        BusWidth::Bits64 => 4,
+        BusWidth::Bits16BE | BusWidth::Bits16LE => 2,
+        BusWidth::Bits32BE | BusWidth::Bits32LE => 3,
+        BusWidth::Bits64BE | BusWidth::Bits64LE => 4,
     }
 }
 
@@ -296,7 +296,7 @@ impl ClockInterface for FsmcClock {
     }
 }
 
-impl Memory for Fsmc {
+impl Bus for Fsmc {
     fn write_addr(
         &self,
         addr_width: BusWidth,
@@ -307,8 +307,8 @@ impl Memory for Fsmc {
     ) -> ReturnCode {
         debug!("write reg {} len {}", addr, len);
         match addr_width {
-            BusWidth::Bits8 | BusWidth::Bits16 => match data_width {
-                BusWidth::Bits8 | BusWidth::Bits16 => {
+            BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => match data_width {
+                BusWidth::Bits8 | BusWidth::Bits16LE | BusWidth::Bits16BE => {
                     self.write_reg(addr as u16);
                     self.write(data_width, buffer, len)
                 }
@@ -331,8 +331,8 @@ impl Memory for Fsmc {
     fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         debug!("write {}", len);
         match data_width {
-            BusWidth::Bits8 | BusWidth::Bits16 => {
-                let bytes = bus_width_in_bytes(data_width);
+            BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
+                let bytes = bus_width_in_bytes(&data_width);
                 if len > 0 {
                     debug!("{:?}", &buffer[0..4]);
                 }
@@ -341,7 +341,13 @@ impl Memory for Fsmc {
                         let mut data: u16 = 0;
                         for byte in 0..bytes {
                             data = data
-                                | (buffer[bytes * pos + (bytes - byte - 1)] as u16) << (8 * byte);
+                                | (buffer[bytes * pos
+                                    + match data_width {
+                                        BusWidth::Bits8 | BusWidth::Bits16LE => byte,
+                                        BusWidth::Bits16BE => (bytes - byte - 1),
+                                        _ => panic!("fsmc bus error"),
+                                    }] as u16)
+                                    << (8 * byte);
                         }
                         self.write_data(data);
                     }

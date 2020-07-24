@@ -2,6 +2,7 @@
 
 pub mod alarm;
 pub mod analog_comparator;
+pub mod bus;
 pub mod button;
 pub mod cdc;
 pub mod console;
@@ -20,7 +21,6 @@ pub mod led;
 pub mod lldb;
 pub mod ls016b8uy;
 pub mod lsm303dlhc;
-pub mod memory_async;
 pub mod mlx90614;
 pub mod mx25r6435f;
 pub mod ninedof;

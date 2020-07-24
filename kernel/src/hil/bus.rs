@@ -7,12 +7,15 @@ pub enum Error {
 
 pub enum BusWidth {
     Bits8,
-    Bits16,
-    Bits32,
-    Bits64,
+    Bits16LE,
+    Bits16BE,
+    Bits32LE,
+    Bits32BE,
+    Bits64LE,
+    Bits64BE,
 }
 
-pub trait Memory {
+pub trait Bus {
     fn write_addr(
         &self,
         addr_width: BusWidth,

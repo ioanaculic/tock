@@ -1,4 +1,4 @@
-//! Components for the ST77XX SPI screen.
+//! Components for the ST77XX screen.
 //!
 //! SPI Interface
 //!
@@ -15,8 +15,8 @@
 //!         spi_mux,
 //!         // timer type
 //!         stm32f4xx::tim2::Tim2,
-//!         // dc pin
-//!         stm32f4xx::gpio::PinId::PA00.get_pin().as_ref().unwrap(),
+//!         // dc pin optional
+//!         Some(stm32f4xx::gpio::PinId::PA00.get_pin().as_ref().unwrap()),
 //!         // reset pin
 //!         stm32f4xx::gpio::PinId::PA00.get_pin().as_ref().unwrap()
 //!     )
@@ -26,7 +26,7 @@ use capsules::st77xx::{ST77XXScreen, ST77XX};
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use core::mem::MaybeUninit;
 use kernel::component::Component;
-use kernel::hil::memory_async::Memory;
+use kernel::hil::bus::Bus;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
 use kernel::static_init_half;
@@ -34,19 +34,19 @@ use kernel::static_init_half;
 // Setup static space for the objects.
 #[macro_export]
 macro_rules! st77xx_component_helper {
-    ($screen:expr, $fsmc:expr, $A:ty, $dc:expr, $reset:expr) => {{
+    ($screen:expr, $bus:expr, $A:ty, $dc:expr, $reset:expr) => {{
         use capsules::st77xx::ST77XX;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;
         use core::mem::MaybeUninit;
-        use kernel::hil::memory_async::Memory;
+        use kernel::hil::bus::Bus;
         use kernel::hil::spi::{self, SpiMasterDevice};
-        let st77xx_mem: &'static dyn Memory = $fsmc;
+        let st77xx_bus: &'static dyn Bus = $bus;
         static mut st77xx_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut st77xx: MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
         (
-            st77xx_mem,
+            st77xx_bus,
             &mut st77xx_alarm,
             $dc,
             $reset,
@@ -70,7 +70,7 @@ impl<A: 'static + time::Alarm<'static>> ST77XXComponent<A> {
 
 impl<A: 'static + time::Alarm<'static>> Component for ST77XXComponent<A> {
     type StaticInput = (
-        &'static dyn Memory,
+        &'static dyn Bus,
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
         Option<&'static dyn kernel::hil::gpio::Pin>,
         &'static dyn kernel::hil::gpio::Pin,
