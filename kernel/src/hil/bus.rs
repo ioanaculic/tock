@@ -1,9 +1,7 @@
-use crate::returncode::ReturnCode;
+//! Abstraction Interface for several busses.
+//! Useful for devices that support multiple protocols
 
-pub enum Error {
-    Complete,
-    Error,
-}
+use crate::returncode::ReturnCode;
 
 pub enum BusWidth {
     Bits8,
@@ -13,6 +11,17 @@ pub enum BusWidth {
     Bits32BE,
     Bits64LE,
     Bits64BE,
+}
+
+impl BusWidth {
+    pub fn width_in_bytes(&self) -> usize {
+        match self {
+            BusWidth::Bits8 => 1,
+            BusWidth::Bits16BE | BusWidth::Bits16LE => 2,
+            BusWidth::Bits32BE | BusWidth::Bits32LE => 3,
+            BusWidth::Bits64BE | BusWidth::Bits64LE => 4,
+        }
+    }
 }
 
 pub trait Bus {

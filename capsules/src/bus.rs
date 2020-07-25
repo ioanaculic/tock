@@ -6,15 +6,6 @@ use kernel::hil::i2c::{Error, I2CClient, I2CDevice};
 use kernel::hil::spi::{ClockPhase, ClockPolarity, SpiMasterClient, SpiMasterDevice};
 use kernel::ReturnCode;
 
-fn bus_width_in_bytes(bus_width: &BusWidth) -> usize {
-    match bus_width {
-        BusWidth::Bits8 => 1,
-        BusWidth::Bits16BE | BusWidth::Bits16LE => 2,
-        BusWidth::Bits32BE | BusWidth::Bits32LE => 3,
-        BusWidth::Bits64BE | BusWidth::Bits64LE => 4,
-    }
-}
-
 #[derive(Copy, Clone)]
 enum BusStatus {
     Idle,
@@ -74,7 +65,7 @@ impl<'a> Bus for SpiBus<'a> {
 
     fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is sent as is
-        let bytes = bus_width_in_bytes(&data_width);
+        let bytes = data_width.width_in_bytes();
         self.bus_width.set(bytes);
         if buffer.len() >= len * bytes {
             self.status.set(BusStatus::Write);
@@ -87,7 +78,7 @@ impl<'a> Bus for SpiBus<'a> {
 
     fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is read as is
-        let bytes = bus_width_in_bytes(&data_width);
+        let bytes = data_width.width_in_bytes();
         self.bus_width.set(bytes);
         self.read_write_buffer.take().map_or_else(
             || panic!("bus::read: spi did not return the read write buffer"),
@@ -184,7 +175,7 @@ impl<'a> Bus for I2CBus<'a> {
 
     fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is sent as is
-        let bytes = bus_width_in_bytes(&data_width);
+        let bytes = data_width.width_in_bytes();
         self.len.set(len * bytes);
         if len * bytes < 255 && buffer.len() >= len * bytes {
             debug!("write len {}", len);
@@ -199,7 +190,7 @@ impl<'a> Bus for I2CBus<'a> {
 
     fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is read as is
-        let bytes = bus_width_in_bytes(&data_width);
+        let bytes = data_width.width_in_bytes();
         self.len.set(len * bytes);
         if len & bytes < 255 && buffer.len() >= len * bytes {
             self.len.set(len);

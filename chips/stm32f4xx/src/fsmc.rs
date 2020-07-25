@@ -6,7 +6,6 @@ use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil::bus::{Bus, BusWidth, Client};
 use kernel::{ClockInterface, ReturnCode};
-use kernel::debug;
 
 use crate::deferred_calls::DeferredCallTask;
 
@@ -142,15 +141,6 @@ struct FsmcBank {
     reg: ReadWrite<u16>,
     /// Data
     ram: ReadWrite<u16>,
-}
-
-fn bus_width_in_bytes(bus_width: &BusWidth) -> usize {
-    match bus_width {
-        BusWidth::Bits8 => 1,
-        BusWidth::Bits16BE | BusWidth::Bits16LE => 2,
-        BusWidth::Bits32BE | BusWidth::Bits32LE => 3,
-        BusWidth::Bits64BE | BusWidth::Bits64LE => 4,
-    }
 }
 
 const FSMC_BANK1: StaticRef<FsmcBank> = unsafe { StaticRef::new(0x60000000 as *const FsmcBank) };
@@ -295,11 +285,7 @@ impl Bus for Fsmc {
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
-                debug! ("write reg");
                 self.write_reg(addr as u16);
-                // self.client.map(move |client| {
-                //     client.command_complete(None, 0);
-                // });
                 DEFERRED_CALL.set();
                 ReturnCode::SUCCESS
             }
@@ -310,9 +296,8 @@ impl Bus for Fsmc {
     fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         match data_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
-                let bytes = bus_width_in_bytes(&data_width);
+                let bytes = data_width.width_in_bytes();
                 if buffer.len() >= len * bytes {
-                    debug! ("write data");
                     for pos in 0..len {
                         let mut data: u16 = 0;
                         for byte in 0..bytes {
@@ -343,7 +328,7 @@ impl Bus for Fsmc {
     fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         match data_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
-                let bytes = bus_width_in_bytes(&data_width);
+                let bytes = data_width.width_in_bytes();
                 if buffer.len() >= len * bytes {
                     for pos in 0..len {
                         let data = self.read_reg();
