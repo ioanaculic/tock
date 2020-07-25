@@ -286,10 +286,10 @@ impl<'a> Screen<'a> {
                             app.width * app.height,
                             self.pixel_format.get().get_bits_per_pixel(),
                         );
-                        
+
                         self.buffer.take().map_or(ReturnCode::FAIL, |buffer| {
                             let len = self.fill_next_buffer_for_write(buffer);
-                        
+
                             if len > 0 {
                                 self.screen.write(buffer, len)
                             } else {
@@ -320,7 +320,7 @@ impl<'a> Screen<'a> {
                         app.write_len = len;
                         self.buffer.take().map_or(ReturnCode::FAIL, |buffer| {
                             let len = self.fill_next_buffer_for_write(buffer);
-                            
+
                             if len > 0 {
                                 self.screen.write(buffer, len)
                             } else {
@@ -450,7 +450,8 @@ impl<'a> Screen<'a> {
                                     // TODO should panic or report an error?
                                     panic!("screen has no slice to send");
                                 }
-                                app.write_position = app.write_position + write_len * bytes_per_pixel;
+                                app.write_position =
+                                    app.write_position + write_len * bytes_per_pixel;
                                 write_len * bytes_per_pixel
                             } else {
                                 // unknown command
@@ -474,7 +475,7 @@ impl<'a> hil::screen::ScreenClient for Screen<'a> {
 
     fn write_complete(&self, buffer: &'static mut [u8], r: ReturnCode) {
         let len = self.fill_next_buffer_for_write(buffer);
-        
+
         if r == ReturnCode::SUCCESS && len > 0 {
             self.screen.write_continue(buffer, len);
         } else {

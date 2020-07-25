@@ -135,7 +135,7 @@ pub trait Screen {
     /// - `EBUSY`: Another write is in progress.
     fn write(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode;
 
-    /// Continues the previous previous write command 
+    /// Continues the previous previous write command
     /// When finished, the driver will call the `write_complete()` callback.
     ///
     /// Return values:

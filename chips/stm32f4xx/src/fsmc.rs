@@ -229,13 +229,11 @@ impl Fsmc {
     pub fn handle_interrupt(&self) {
         self.buffer.take().map_or_else(
             || {
-                
                 self.client.map(move |client| {
                     client.command_complete(None, 0);
                 });
             },
             |buffer| {
-                
                 self.client.map(move |client| {
                     client.command_complete(Some(buffer), self.len.get());
                 });

@@ -518,66 +518,63 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
     fn do_next_op(&self) {
         match self.status.get() {
             Status::Delay => {
-                        let position = self.position_in_sequence.get();
-                        
-                        self.position_in_sequence
-                            .set(self.position_in_sequence.get() + 1);
-                        if position < self.sequence_len.get() {
-                            self.sequence_buffer.map_or_else(
-                                || panic!("st77xx: do next op has no sequence buffer"),
-                                |sequence| {
-                                    
-                                    match sequence[position] {
-                                        SendCommand::Nop => {
-                                            self.do_next_op();
-                                        }
-                                        SendCommand::Default(ref cmd) => {
-                                            self.send_command_with_default_parameters(cmd);
-                                        }
-                                        SendCommand::Position(ref cmd, position, len) => {
-                                            self.send_command(cmd, position, len, 1);
-                                        }
-                                        SendCommand::Repeat(ref cmd, position, len, repeat) => {
-                                            self.send_command(cmd, position, len, repeat);
-                                        }
-                                        SendCommand::Slice(ref cmd, len) => {
-                                            self.send_command_slice(cmd, len);
-                                        }
-                                    };
-                                },
-                            );
-                        } else {
-                            self.status.set(Status::Idle);
-                            self.callback.map(|callback| {
-                                callback.schedule(0, 0, 0);
+                let position = self.position_in_sequence.get();
+
+                self.position_in_sequence
+                    .set(self.position_in_sequence.get() + 1);
+                if position < self.sequence_len.get() {
+                    self.sequence_buffer.map_or_else(
+                        || panic!("st77xx: do next op has no sequence buffer"),
+                        |sequence| {
+                            match sequence[position] {
+                                SendCommand::Nop => {
+                                    self.do_next_op();
+                                }
+                                SendCommand::Default(ref cmd) => {
+                                    self.send_command_with_default_parameters(cmd);
+                                }
+                                SendCommand::Position(ref cmd, position, len) => {
+                                    self.send_command(cmd, position, len, 1);
+                                }
+                                SendCommand::Repeat(ref cmd, position, len, repeat) => {
+                                    self.send_command(cmd, position, len, repeat);
+                                }
+                                SendCommand::Slice(ref cmd, len) => {
+                                    self.send_command_slice(cmd, len);
+                                }
+                            };
+                        },
+                    );
+                } else {
+                    self.status.set(Status::Idle);
+                    self.callback.map(|callback| {
+                        callback.schedule(0, 0, 0);
+                    });
+                    if !self.power_on.get() {
+                        self.client.map(|client| {
+                            self.power_on.set(true);
+
+                            client.screen_is_ready();
+                        });
+                    } else {
+                        if self.setup_command.get() {
+                            self.setup_command.set(false);
+                            self.setup_client.map(|setup_client| {
+                                setup_client.command_complete(ReturnCode::SUCCESS);
                             });
-                            if !self.power_on.get() {
-                                self.client.map(|client| {
-                                    self.power_on.set(true);
-                                    
-                                    client.screen_is_ready();
-                                });
-                            } else {
-                                if self.setup_command.get() {
-                                    self.setup_command.set(false);
-                                    self.setup_client.map(|setup_client| {
-                                        setup_client.command_complete(ReturnCode::SUCCESS);
+                        } else {
+                            self.client.map(|client| {
+                                if self.write_buffer.is_some() {
+                                    self.write_buffer.take().map(|buffer| {
+                                        client.write_complete(buffer, ReturnCode::SUCCESS);
                                     });
                                 } else {
-                                    self.client.map(|client| {
-                                        if self.write_buffer.is_some() {
-                                            self.write_buffer.take().map(|buffer| {
-                                                client.write_complete(buffer, ReturnCode::SUCCESS);
-                                            });
-                                        } else {
-                                            client.command_complete(ReturnCode::SUCCESS);
-                                        }
-                                    });
+                                    client.command_complete(ReturnCode::SUCCESS);
                                 }
-                            }
+                            });
                         }
-                        
-                    
+                    }
+                }
             }
             Status::SendCommand(parameters_position, parameters_length, repeat) => {
                 if repeat == 0 {
@@ -895,7 +892,6 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST77XX<'a, A> {
 
     fn write(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         if self.status.get() == Status::Idle {
-            
             self.setup_command.set(false);
             self.write_buffer.replace(buffer);
             let buffer_len = self.buffer.map_or_else(
@@ -921,11 +917,11 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST77XX<'a, A> {
         }
     }
 
-    fn write_continue (&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+    fn write_continue(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         if self.status.get() == Status::Idle {
             self.setup_command.set(false);
             self.write_buffer.replace(buffer);
-            self.send_parameters_slice (len);
+            self.send_parameters_slice(len);
             ReturnCode::SUCCESS
         } else {
             ReturnCode::EBUSY
@@ -972,7 +968,7 @@ impl<'a, A: Alarm<'a>> bus::Client for ST77XX<'a, A> {
                 self.buffer.replace(buffer);
             }
         }
-        
+
         self.do_next_op();
     }
 }

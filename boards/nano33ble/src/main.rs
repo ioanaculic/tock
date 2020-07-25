@@ -40,10 +40,6 @@ const GPIO_D10: Pin = Pin::P1_02;
 const _UART_TX_PIN: Pin = Pin::P1_03;
 const _UART_RX_PIN: Pin = Pin::P1_10;
 
-const SPI_MOSI: Pin = Pin::P1_01;
-const SPI_MISO: Pin = Pin::P1_08;
-const SPI_CLK: Pin = Pin::P0_13;
-
 /// UART Writer for panic!()s.
 pub mod io;
 
@@ -80,7 +76,6 @@ pub struct Platform {
         'static,
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
     >,
-    screen: &'static capsules::screen::Screen<'static>,
 }
 
 impl kernel::Platform for Platform {
@@ -97,7 +92,6 @@ impl kernel::Platform for Platform {
             // capsules::ble_advertising_driver::DRIVER_NUM => f(Some(self.ble_radio)),
             // capsules::ieee802154::DRIVER_NUM => f(Some(radio)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
-            capsules::screen::DRIVER_NUM => f(Some(self.screen)),
             _ => f(None),
         }
     }
@@ -139,9 +133,9 @@ pub unsafe fn reset_handler() {
         board_kernel,
         components::gpio_component_helper!(
             nrf52840::gpio::GPIOPin,
-            // 2 => &nrf52840::gpio::PORT[GPIO_D2],
-            // 3 => &nrf52840::gpio::PORT[GPIO_D3],
-            // 4 => &nrf52840::gpio::PORT[GPIO_D4],
+            2 => &nrf52840::gpio::PORT[GPIO_D2],
+            3 => &nrf52840::gpio::PORT[GPIO_D3],
+            4 => &nrf52840::gpio::PORT[GPIO_D4],
             5 => &nrf52840::gpio::PORT[GPIO_D5],
             6 => &nrf52840::gpio::PORT[GPIO_D6],
             7 => &nrf52840::gpio::PORT[GPIO_D7],
@@ -248,45 +242,6 @@ pub unsafe fn reset_handler() {
     // )
     // .finalize(());
 
-    let spi_mux = components::spi::SpiMuxComponent::new(&nrf52840::spi::SPIM0)
-        .finalize(components::spi_mux_component_helper!(nrf52840::spi::SPIM));
-
-    nrf52840::spi::SPIM0.configure(
-        nrf52840::pinmux::Pinmux::new(SPI_MOSI as u32),
-        nrf52840::pinmux::Pinmux::new(SPI_MISO as u32),
-        nrf52840::pinmux::Pinmux::new(SPI_CLK as u32),
-    );
-
-    let bus =
-        components::bus::SpiBusComponent::new().finalize(components::spi_bus_component_helper!(
-            // spi type
-            nrf52840::spi::SPIM,
-            // chip select
-            &nrf52840::gpio::PORT[GPIO_D4],
-            // spi mux
-            spi_mux
-        ));
-
-    let tft = components::st77xx::ST77XXComponent::new(mux_alarm).finalize(
-        components::st77xx_component_helper!(
-            // screen
-            &capsules::st77xx::ST7735,
-            // bus
-            bus,
-            // timer type
-            nrf52::rtc::Rtc,
-            // dc
-            Some(&nrf52840::gpio::PORT[GPIO_D3]),
-            // reset
-            &nrf52840::gpio::PORT[GPIO_D2]
-        ),
-    );
-
-    tft.init();
-
-    let screen = components::screen::ScreenComponent::new(board_kernel, tft, Some(tft))
-        .finalize(components::screen_buffer_size!(40960));
-
     //--------------------------------------------------------------------------
     // FINAL SETUP AND BOARD BOOT
     //--------------------------------------------------------------------------
@@ -304,7 +259,6 @@ pub unsafe fn reset_handler() {
         rng: rng,
         alarm: alarm,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
-        screen: screen,
     };
 
     let chip = static_init!(nrf52840::chip::Chip, nrf52840::chip::new());

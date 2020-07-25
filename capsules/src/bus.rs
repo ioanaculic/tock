@@ -5,7 +5,7 @@
 //!
 //! I2C example
 //! ```rust
-//! let bus = components::bus::I2CBusComponent::new(i2c_mux, address)
+//! let bus = components::bus::I2CMasterBusComponent::new(i2c_mux, address)
 //!     .finalize(components::spi_bus_component_helper!());
 //! ));
 //! ```
@@ -13,7 +13,7 @@
 //! SPI example
 //! ```rust
 //! let bus =
-//!     components::bus::SpiBusComponent::new().finalize(components::spi_bus_component_helper!(
+//!     components::bus::SpiMasterBusComponent::new().finalize(components::spi_bus_component_helper!(
 //!         // spi type
 //!         nrf52840::spi::SPIM,
 //!         // chip select
