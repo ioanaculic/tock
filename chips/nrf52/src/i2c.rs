@@ -13,7 +13,6 @@ use kernel::common::cells::VolatileCell;
 use kernel::common::registers::{register_bitfields, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil;
-use kernel::ReturnCode;
 use nrf5x::pinmux::Pinmux;
 
 /// Uninitialized `TWIM` instances.
@@ -134,13 +133,7 @@ impl hil::i2c::I2CMaster for TWIM {
         self.disable();
     }
 
-    fn write_read(
-        &self,
-        addr: u8,
-        data: &'static mut [u8],
-        write_len: u8,
-        read_len: u8,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {
         self.registers
             .address
             .write(ADDRESS::ADDRESS.val((addr >> 1) as u32));
@@ -165,15 +158,9 @@ impl hil::i2c::I2CMaster for TWIM {
         // start the transfer
         self.registers.tasks_starttx.write(TASK::TASK::SET);
         self.buf.replace(data);
-        Ok(())
     }
 
-    fn write(
-        &self,
-        addr: u8,
-        data: &'static mut [u8],
-        len: u8,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
         self.registers
             .address
             .write(ADDRESS::ADDRESS.val((addr >> 1) as u32));
@@ -192,15 +179,9 @@ impl hil::i2c::I2CMaster for TWIM {
         // start the transfer
         self.registers.tasks_starttx.write(TASK::TASK::SET);
         self.buf.replace(data);
-        Ok(())
     }
 
-    fn read(
-        &self,
-        addr: u8,
-        buffer: &'static mut [u8],
-        len: u8,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {
         self.registers
             .address
             .write(ADDRESS::ADDRESS.val((addr >> 1) as u32));
@@ -219,7 +200,6 @@ impl hil::i2c::I2CMaster for TWIM {
         // start the transfer
         self.registers.tasks_startrx.write(TASK::TASK::SET);
         self.buf.replace(buffer);
-        Ok(())
     }
 }
 

@@ -232,10 +232,7 @@ impl<
                         txbuffer[0] = Opcodes::RDID as u8;
 
                         self.state.set(State::ReadId);
-                        match self.spi.read_write_bytes(txbuffer, Some(rxbuffer), 4) {
-                            Err((code, _, _)) => code,
-                            Ok(()) => ReturnCode::SUCCESS,
-                        }
+                        self.spi.read_write_bytes(txbuffer, Some(rxbuffer), 4)
                     })
             })
     }
@@ -248,10 +245,7 @@ impl<
             .take()
             .map_or(ReturnCode::ERESERVE, |txbuffer| {
                 txbuffer[0] = Opcodes::WREN as u8;
-                match self.spi.read_write_bytes(txbuffer, None, 1) {
-                    Err((code, _, _)) => code,
-                    Ok(()) => ReturnCode::SUCCESS,
-                }
+                self.spi.read_write_bytes(txbuffer, None, 1)
             })
     }
 
@@ -289,14 +283,11 @@ impl<
                             sector_index,
                             page_index: 0,
                         });
-                        match self.spi.read_write_bytes(
+                        self.spi.read_write_bytes(
                             txbuffer,
                             Some(rxbuffer),
                             (PAGE_SIZE + 4) as usize,
-                        ) {
-                            Err((code, _, _)) => code,
-                            Ok(()) => ReturnCode::SUCCESS,
-                        }
+                        )
                     })
             });
 
@@ -387,13 +378,11 @@ impl<
                                 page_index: page_index + 1,
                             });
                             self.client_sector.replace(sector);
-                            self.spi
-                                .read_write_bytes(
-                                    write_buffer,
-                                    Some(read_buffer),
-                                    (PAGE_SIZE + 4) as usize,
-                                )
-                                .expect("spi device error");
+                            self.spi.read_write_bytes(
+                                write_buffer,
+                                Some(read_buffer),
+                                (PAGE_SIZE + 4) as usize,
+                            );
                         }
                     });
                 });
@@ -408,9 +397,7 @@ impl<
                 write_buffer[2] = ((sector_index * SECTOR_SIZE) >> 8) as u8;
                 write_buffer[3] = ((sector_index * SECTOR_SIZE) >> 0) as u8;
 
-                self.spi
-                    .read_write_bytes(write_buffer, None, 4)
-                    .expect("spi device error");
+                self.spi.read_write_bytes(write_buffer, None, 4);
             }
             State::EraseSectorErase { operation } => {
                 self.state.set(State::EraseSectorCheckDone { operation });
@@ -429,8 +416,7 @@ impl<
                     if status & 0x01 == 0x01 {
                         // Erase is still in progress.
                         self.spi
-                            .read_write_bytes(write_buffer, Some(read_buffer), 2)
-                            .expect("spi device error");
+                            .read_write_bytes(write_buffer, Some(read_buffer), 2);
                     } else {
                         // Erase has finished, so jump to the next state.
                         let next_state = match operation {
@@ -476,9 +462,7 @@ impl<
                     });
                     // Need to write enable before each PP
                     write_buffer[0] = Opcodes::WREN as u8;
-                    self.spi
-                        .read_write_bytes(write_buffer, None, 1)
-                        .expect("spi device error");
+                    self.spi.read_write_bytes(write_buffer, None, 1);
                 }
             }
             State::WriteSectorWrite {
@@ -503,8 +487,7 @@ impl<
                 });
 
                 self.spi
-                    .read_write_bytes(write_buffer, None, (PAGE_SIZE + 4) as usize)
-                    .expect("spi device error");
+                    .read_write_bytes(write_buffer, None, (PAGE_SIZE + 4) as usize);
             }
             State::WriteSectorCheckDone {
                 sector_index,
@@ -532,8 +515,7 @@ impl<
                     if status & 0x01 == 0x01 {
                         // Write is still in progress.
                         self.spi
-                            .read_write_bytes(write_buffer, Some(read_buffer), 2)
-                            .expect("spi device error");
+                            .read_write_bytes(write_buffer, Some(read_buffer), 2);
                     } else {
                         // Write has finished, so go back to writing.
                         self.state.set(State::WriteSectorWriteEnable {
@@ -564,8 +546,7 @@ impl<
             self.rxbuffer.take().map(move |read_buffer| {
                 write_buffer[0] = Opcodes::RDSR as u8;
                 self.spi
-                    .read_write_bytes(write_buffer, Some(read_buffer), 2)
-                    .expect("spi device error");
+                    .read_write_bytes(write_buffer, Some(read_buffer), 2);
             });
         });
     }

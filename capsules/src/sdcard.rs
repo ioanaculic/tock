@@ -325,7 +325,7 @@ impl<'a, A: hil::time::Alarm<'a>> SDCard<'a, A> {
         // Length is command bytes (8) plus recv_len
         self.spi
             .read_write_bytes(write_buffer, Some(read_buffer), 8 + recv_len)
-            .expect("spi device error");
+            ;
     }
 
     /// wrapper for easy reading of bytes over SPI
@@ -347,7 +347,7 @@ impl<'a, A: hil::time::Alarm<'a>> SDCard<'a, A> {
 
         self.spi
             .read_write_bytes(write_buffer, Some(read_buffer), recv_len)
-            .expect("spi device error");
+            ;
     }
 
     /// wrapper for easy writing of bytes over SPI
@@ -361,7 +361,7 @@ impl<'a, A: hil::time::Alarm<'a>> SDCard<'a, A> {
 
         self.spi
             .read_write_bytes(write_buffer, Some(read_buffer), recv_len)
-            .expect("spi device error");
+            ;
     }
 
     /// parse response bytes from SPI read buffer

@@ -237,9 +237,13 @@ impl Fsmc {
     }
 
     pub fn handle_interrupt(&self) {
-        self.buffer.take().map(|buffer| {
+        self.buffer.take().map_or_else(
+            || self.client.map(move |client| {
+                client.command_complete(None, self.len.get());
+            }),
+            |buffer| {
             self.client.map(move |client| {
-                client.command_complete(buffer, self.len.get());
+                client.command_complete(Some(buffer), self.len.get());
             });
         });
     }
@@ -283,43 +287,21 @@ impl ClockInterface for FsmcClock {
 }
 
 impl Bus for Fsmc {
-    fn write_addr(
+    fn set_addr(
         &self,
         addr_width: BusWidth,
         addr: usize,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    ) -> ReturnCode {
         debug!("write reg {} len {}", addr, len);
         match addr_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => match data_width {
                 BusWidth::Bits8 | BusWidth::Bits16LE | BusWidth::Bits16BE => {
                     self.write_reg(addr as u16);
-                    self.write(data_width, buffer, len)
+                    DEFERRED_CALL.set();
                 }
-                _ => Err((ReturnCode::ENOSUPPORT, buffer)),
+                _ => ReturnCode::ENOSUPPORT,
             },
-            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
-        }
-    }
-    fn read_addr(
-        &self,
-        addr_width: BusWidth,
-        addr: usize,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
-        match addr_width {
-            BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => match data_width {
-                BusWidth::Bits8 | BusWidth::Bits16LE | BusWidth::Bits16BE => {
-                    self.write_reg(addr as u16);
-                    self.read(data_width, buffer, len)
-                }
-                _ => Err((ReturnCode::ENOSUPPORT, buffer)),
-            },
-            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
@@ -328,7 +310,7 @@ impl Bus for Fsmc {
         data_width: BusWidth,
         buffer: &'static mut [u8],
         len: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    ) -> ReturnCode {
         debug!("write {}", len);
         match data_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
@@ -360,7 +342,7 @@ impl Bus for Fsmc {
                     Err((ReturnCode::ENOMEM, buffer))
                 }
             }
-            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
@@ -369,7 +351,7 @@ impl Bus for Fsmc {
         data_width: BusWidth,
         buffer: &'static mut [u8],
         len: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    ) -> ReturnCode {
         match data_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
                 let bytes = bus_width_in_bytes(&data_width);
@@ -394,7 +376,7 @@ impl Bus for Fsmc {
                     Err((ReturnCode::ENOMEM, buffer))
                 }
             }
-            _ => Err((ReturnCode::ENOSUPPORT, buffer)),
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 

@@ -26,7 +26,7 @@ impl spi::SpiMasterClient for DummyCB {
             // do actual stuff
             sam4l::spi::SPI
                 .read_write_bytes(&mut A5, None, A5.len())
-                .expect("spi device error");
+                ;
 
             // FLOP = !FLOP;
             // let len: usize = BUF1.len();

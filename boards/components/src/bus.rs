@@ -11,12 +11,13 @@ use kernel::static_init_half;
 macro_rules! spi_bus_component_helper {
     ($S:ty, $select:expr, $spi_mux: expr) => {{
         use capsules::bus::SpiBus;
-        use core::mem::MaybeUninit;
-        let mem_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
+        use core::mem::{size_of, MaybeUninit};
+        let bus_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
             components::spi::SpiComponent::new($spi_mux, $select)
                 .finalize(components::spi_component_helper!($S));
-        static mut mem: MaybeUninit<SpiBus<'static>> = MaybeUninit::uninit();
-        (&mem_spi, &mut mem)
+        static mut ADDRESS_BUFFER: [u8; size_of::<usize>()] = [0; size_of::<usize>()];
+        static mut bus: MaybeUninit<SpiBus<'static>> = MaybeUninit::uninit();
+        (&bus_spi, &mut bus, &mut ADDRESS_BUFFER)
     };};
 }
 
@@ -36,17 +37,18 @@ impl<S: 'static + spi::SpiMaster> Component for SpiBusComponent<S> {
     type StaticInput = (
         &'static VirtualSpiMasterDevice<'static, S>,
         &'static mut MaybeUninit<SpiBus<'static>>,
+        &'static mut [u8],
     );
     type Output = &'static SpiBus<'static>;
 
     unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
-        let mem = static_init_half!(
+        let bus = static_init_half!(
             static_buffer.1,
             SpiBus<'static>,
-            SpiBus::new(static_buffer.0)
+            SpiBus::new(static_buffer.0, static_buffer.2)
         );
-        static_buffer.0.set_client(mem);
+        static_buffer.0.set_client(bus);
 
-        mem
+        bus
     }
 }

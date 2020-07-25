@@ -1107,7 +1107,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
         wbuf[1] = val;
         self.spi
             .read_write_bytes(wbuf, Some(rbuf), 2)
-            .expect("spi device error");
+            ;
         self.spi_busy.set(true);
 
         ReturnCode::SUCCESS
@@ -1124,7 +1124,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
         wbuf[1] = 0;
         self.spi
             .read_write_bytes(wbuf, Some(rbuf), 2)
-            .expect("spi device error");
+            ;
         self.spi_busy.set(true);
 
         ReturnCode::SUCCESS
@@ -1139,7 +1139,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
         buf[0] = RF233BusCommand::FRAME_WRITE as u8;
         self.spi
             .read_write_bytes(buf, self.spi_buf.take(), buf_len)
-            .expect("spi device error");
+            ;
         self.spi_busy.set(true);
         ReturnCode::SUCCESS
     }
@@ -1154,7 +1154,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
         wbuf[0] = RF233BusCommand::FRAME_READ as u8;
         self.spi
             .read_write_bytes(wbuf, Some(buf), buf_len)
-            .expect("spi device error");
+            ;
         self.spi_busy.set(true);
         ReturnCode::SUCCESS
     }

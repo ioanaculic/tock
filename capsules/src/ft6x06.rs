@@ -25,7 +25,7 @@ use enum_primitive::cast::FromPrimitive;
 use enum_primitive::enum_from_primitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::gpio;
-use kernel::hil::i2c::{self, Error, I2CClient};
+use kernel::hil::i2c::{self, Error};
 use kernel::hil::touch::{self, GestureEvent, TouchEvent, TouchStatus};
 use kernel::{AppId, Driver, ReturnCode};
 
@@ -97,12 +97,49 @@ impl<'a> Ft6x06<'a> {
 }
 
 impl<'a> i2c::I2CClient for Ft6x06<'a> {
-    fn command_complete(&self, buffer: &'static mut [u8], error: Error) {
+    fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
         self.state.set(State::Idle);
-        if let Error::CommandComplete = error {
-            self.num_touches.set((buffer[1] & 0x0F) as usize);
-            self.touch_client.map(|client| {
-                if self.num_touches.get() <= 2 {
+        self.num_touches.set((buffer[1] & 0x0F) as usize);
+        self.touch_client.map(|client| {
+            if self.num_touches.get() <= 2 {
+                let status = match buffer[1] >> 6 {
+                    0x00 => TouchStatus::Pressed,
+                    0x01 => TouchStatus::Released,
+                    _ => TouchStatus::Released,
+                };
+                let x = (((buffer[2] & 0x0F) as u16) << 8) + (buffer[3] as u16);
+                let y = (((buffer[4] & 0x0F) as u16) << 8) + (buffer[5] as u16);
+                let pressure = Some(buffer[6] as u16);
+                let size = Some(buffer[7] as u16);
+                client.touch_event(TouchEvent {
+                    status,
+                    x,
+                    y,
+                    id: 0,
+                    pressure,
+                    size,
+                });
+            }
+        });
+        self.gesture_client.map(|client| {
+            if self.num_touches.get() <= 2 {
+                let gesture_event = match buffer[0] {
+                    0x10 => Some(GestureEvent::SwipeUp),
+                    0x14 => Some(GestureEvent::SwipeRight),
+                    0x18 => Some(GestureEvent::SwipeDown),
+                    0x1C => Some(GestureEvent::SwipeLeft),
+                    0x48 => Some(GestureEvent::ZoomIn),
+                    0x49 => Some(GestureEvent::ZoomOut),
+                    _ => None,
+                };
+                if let Some(gesture) = gesture_event {
+                    client.gesture_event(gesture);
+                }
+            }
+        });
+        self.multi_touch_client.map(|client| {
+            if self.num_touches.get() <= 2 {
+                for touch_event in 0..self.num_touches.get() {
                     let status = match buffer[1] >> 6 {
                         0x00 => TouchStatus::Pressed,
                         0x01 => TouchStatus::Released,
@@ -112,61 +149,22 @@ impl<'a> i2c::I2CClient for Ft6x06<'a> {
                     let y = (((buffer[4] & 0x0F) as u16) << 8) + (buffer[5] as u16);
                     let pressure = Some(buffer[6] as u16);
                     let size = Some(buffer[7] as u16);
-                    client.touch_event(TouchEvent {
-                        status,
-                        x,
-                        y,
-                        id: 0,
-                        pressure,
-                        size,
-                    });
-                }
-            });
-            self.gesture_client.map(|client| {
-                if self.num_touches.get() <= 2 {
-                    let gesture_event = match buffer[0] {
-                        0x10 => Some(GestureEvent::SwipeUp),
-                        0x14 => Some(GestureEvent::SwipeRight),
-                        0x18 => Some(GestureEvent::SwipeDown),
-                        0x1C => Some(GestureEvent::SwipeLeft),
-                        0x48 => Some(GestureEvent::ZoomIn),
-                        0x49 => Some(GestureEvent::ZoomOut),
-                        _ => None,
-                    };
-                    if let Some(gesture) = gesture_event {
-                        client.gesture_event(gesture);
-                    }
-                }
-            });
-            self.multi_touch_client.map(|client| {
-                if self.num_touches.get() <= 2 {
-                    for touch_event in 0..self.num_touches.get() {
-                        let status = match buffer[1] >> 6 {
-                            0x00 => TouchStatus::Pressed,
-                            0x01 => TouchStatus::Released,
-                            _ => TouchStatus::Released,
-                        };
-                        let x = (((buffer[2] & 0x0F) as u16) << 8) + (buffer[3] as u16);
-                        let y = (((buffer[4] & 0x0F) as u16) << 8) + (buffer[5] as u16);
-                        let pressure = Some(buffer[6] as u16);
-                        let size = Some(buffer[7] as u16);
-                        self.events.map(|buffer| {
-                            buffer[touch_event] = TouchEvent {
-                                status,
-                                x,
-                                y,
-                                id: 0,
-                                pressure,
-                                size,
-                            };
-                        });
-                    }
                     self.events.map(|buffer| {
-                        client.touch_events(buffer, self.num_touches.get());
+                        buffer[touch_event] = TouchEvent {
+                            status,
+                            x,
+                            y,
+                            id: 0,
+                            pressure,
+                            size,
+                        };
                     });
                 }
-            });
-        }
+                self.events.map(|buffer| {
+                    client.touch_events(buffer, self.num_touches.get());
+                });
+            }
+        });
         self.buffer.replace(buffer);
         self.interrupt_pin
             .enable_interrupts(gpio::InterruptEdge::FallingEdge);
@@ -181,9 +179,7 @@ impl<'a> gpio::Client for Ft6x06<'a> {
             self.state.set(State::ReadingTouches);
 
             buffer[0] = Registers::REG_GEST_ID as u8;
-            if let Err((_, buffer)) = self.i2c.write_read(buffer, 1, 15) {
-                self.command_complete(buffer, Error::DeviceError);
-            }
+            self.i2c.write_read(buffer, 1, 15);
         });
     }
 }

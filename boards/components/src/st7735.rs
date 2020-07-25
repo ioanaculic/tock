@@ -22,12 +22,14 @@
 //!     )
 //! );
 //! ```
-use capsules::memory_async::SpiMemory;
-use capsules::st7735::ST77XX;
+use capsules::st7735::ST7735;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use capsules::virtual_spi::VirtualSpiMasterDevice;
+use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use kernel::component::Component;
-use kernel::hil::memory_async::Memory;
+use kernel::hil::bus::Bus;
+use kernel::hil::spi;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
 use kernel::static_init_half;
@@ -35,28 +37,15 @@ use kernel::static_init_half;
 // Setup static space for the objects.
 #[macro_export]
 macro_rules! st7735_component_helper {
-    ($S:ty, $select:expr, $spi_mux: expr, $A:ty, $dc:expr, $reset:expr) => {{
+    ($bus:expr, $A:ty, $dc:expr, $reset:expr) => {{
         use capsules::st7735::ST7735;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;
         use core::mem::MaybeUninit;
-        use kernel::hil::spi::{self, SpiMasterDevice};
-        let st7735_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
-            components::spi::SpiComponent::new($spi_mux, $select)
-                .finalize(components::spi_component_helper!($S));
-        st7735_spi.configure(
-            spi::ClockPolarity::IdleLow,
-            spi::ClockPhase::SampleTrailing,
-            4_000_000,
-        );
-        let st7735_mem: &'static capsules::memory_async::SpiMemory<'static> =
-            components::memory_async::SpiMemoryComponent::new().finalize(
-                components::spi_memory_component_helper!($S, $select, $spi_mux),
-            );
         static mut st7735_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut st7735: MaybeUninit<ST7735<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
-        (&st7735_mem, &mut st7735_alarm, $dc, $reset, &mut st7735)
+        ($bus, &mut st7735_alarm, $dc, $reset, &mut st7735)
     };};
 }
 
@@ -74,9 +63,9 @@ impl<A: 'static + time::Alarm<'static>> ST7735Component<A> {
 
 impl<A: 'static + time::Alarm<'static>> Component for ST7735Component<A> {
     type StaticInput = (
-        &'static SpiMemory<'static>,
+        &'static dyn Bus,
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
-        &'static dyn kernel::hil::gpio::Pin,
+        Option<&'static dyn kernel::hil::gpio::Pin>,
         &'static dyn kernel::hil::gpio::Pin,
         &'static mut MaybeUninit<ST7735<'static, VirtualMuxAlarm<'static, A>>>,
     );

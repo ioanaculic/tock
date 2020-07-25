@@ -356,7 +356,7 @@ impl hil::spi::SpiMaster for SPIM {
         tx_buf: &'static mut [u8],
         rx_buf: Option<&'static mut [u8]>,
         len: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8], Option<&'static mut [u8]>)> {
+    ) -> ReturnCode {
         debug_assert!(self.initialized.get());
         debug_assert!(!self.busy.get());
         debug_assert!(self.tx_buf.is_none());
@@ -364,7 +364,7 @@ impl hil::spi::SpiMaster for SPIM {
 
         // Clear (set to low) chip-select
         if self.chip_select.is_none() {
-            return Err((ReturnCode::ENODEVICE, tx_buf, rx_buf));
+            return ReturnCode::ENODEVICE;
         }
         self.chip_select.map(|cs| cs.clear());
 
@@ -394,7 +394,7 @@ impl hil::spi::SpiMaster for SPIM {
         // Start the transfer
         self.busy.set(true);
         self.registers.tasks_start.write(TASK::TASK::SET);
-        Ok(())
+        ReturnCode::SUCCESS
     }
 
     fn write_byte(&self, _val: u8) {

@@ -94,7 +94,7 @@ impl<'a> PCA9544A<'a> {
 
             self.i2c
                 .write(buffer, index as u8)
-                .expect("i2c device error");
+                ;
             self.state.set(State::Done);
 
             ReturnCode::SUCCESS
@@ -114,7 +114,7 @@ impl<'a> PCA9544A<'a> {
             self.i2c.enable();
 
             // Just issuing a read to the selector reads its control register.
-            self.i2c.read(buffer, 1).expect("i2c device error");
+            self.i2c.read(buffer, 1);
             self.state.set(State::ReadControl(field));
 
             ReturnCode::SUCCESS
