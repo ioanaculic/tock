@@ -1,18 +1,12 @@
 //! Components for the ST77XX screen.
 //!
-//! SPI Interface
-//!
 //! Usage
 //! -----
 //! ```rust
 //! let tft = components::st77xx::ST77XXComponent::new(alarm_mux).finalize(
 //!     components::st7789h2_component_helper!(
-//!         // spi type
-//!         stm32f4xx::spi::Spi,
-//!         // chip select
-//!         stm32f4xx::gpio::PinId::PE03,
-//!         // spi mux
-//!         spi_mux,
+//!         // bus (&'static dyn Bus)
+//!         bus
 //!         // timer type
 //!         stm32f4xx::tim2::Tim2,
 //!         // dc pin optional
