@@ -3,6 +3,7 @@
 
 use crate::returncode::ReturnCode;
 
+/// Bus width used for address width and data width
 pub enum BusWidth {
     Bits8,
     Bits16LE,
@@ -25,14 +26,32 @@ impl BusWidth {
 }
 
 pub trait Bus {
+    /// Set the address to write to
+    ///
+    /// If the underlaying bus does not support addresses (eg UART)
+    /// this function returns ENOSUPPORT
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode;
 
+    /// Write data items to the previously set address
+    ///
+    /// data_width specifies the encoding of the data items placed in the buffer
+    /// len specifies the number of data items (the number of bytes is len * data_width.width_in_bytes)
     fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
+
+    /// Read data items from the previously set address
+    ///
+    /// data_width specifies the encoding of the data items placed in the buffer
+    /// len specifies the number of data items (the number of bytes is len * data_width.width_in_bytes)
     fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
 
     fn set_client(&self, client: &'static dyn Client);
 }
 
 pub trait Client {
+    /// Called when set_addr, write or read are complete
+    ///
+    /// set_address does not return a buffer
+    /// write and read return a buffer
+    /// len should be set to the number of data elements written
     fn command_complete(&self, buffer: Option<&'static mut [u8]>, len: usize);
 }

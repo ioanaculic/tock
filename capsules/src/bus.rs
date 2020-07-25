@@ -1,3 +1,28 @@
+//! Bus interface implementation for I2C, SPI
+//!
+//! Usage
+//! -----
+//!
+//! I2C example
+//! ```rust
+//! let bus = components::bus::I2CBusComponent::new(i2c_mux, address)
+//!     .finalize(components::spi_bus_component_helper!());
+//! ));
+//! ```
+//!
+//! SPI example
+//! ```rust
+//! let bus =
+//!     components::bus::SpiBusComponent::new().finalize(components::spi_bus_component_helper!(
+//!         // spi type
+//!         nrf52840::spi::SPIM,
+//!         // chip select
+//!         &nrf52840::gpio::PORT[GPIO_D4],
+//!          // spi mux
+//!         spi_mux
+//!     ));
+//! ```
+
 use core::cell::Cell;
 use kernel::common::cells::OptionalCell;
 use kernel::debug;
@@ -16,7 +41,7 @@ enum BusStatus {
 
 /*********** SPI ************/
 
-pub struct SpiBus<'a> {
+pub struct SpiMasterBus<'a> {
     spi: &'a dyn SpiMasterDevice,
     read_write_buffer: OptionalCell<&'static mut [u8]>,
     bus_width: Cell<usize>,
@@ -25,9 +50,9 @@ pub struct SpiBus<'a> {
     status: Cell<BusStatus>,
 }
 
-impl<'a> SpiBus<'a> {
-    pub fn new(spi: &'a dyn SpiMasterDevice, addr_buffer: &'static mut [u8]) -> SpiBus<'a> {
-        SpiBus {
+impl<'a> SpiMasterBus<'a> {
+    pub fn new(spi: &'a dyn SpiMasterDevice, addr_buffer: &'static mut [u8]) -> SpiMasterBus<'a> {
+        SpiMasterBus {
             spi,
             read_write_buffer: OptionalCell::empty(),
             bus_width: Cell::new(1),
@@ -46,7 +71,7 @@ impl<'a> SpiBus<'a> {
     }
 }
 
-impl<'a> Bus for SpiBus<'a> {
+impl<'a> Bus for SpiMasterBus<'a> {
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
             BusWidth::Bits8 => self
@@ -103,7 +128,7 @@ impl<'a> Bus for SpiBus<'a> {
     }
 }
 
-impl<'a> SpiMasterClient for SpiBus<'a> {
+impl<'a> SpiMasterClient for SpiMasterBus<'a> {
     fn read_write_done(
         &self,
         write_buffer: &'static mut [u8],
@@ -136,7 +161,7 @@ impl<'a> SpiMasterClient for SpiBus<'a> {
 
 /*********** I2C ************/
 
-pub struct I2CBus<'a> {
+pub struct I2CMasterBus<'a> {
     i2c: &'a dyn I2CDevice,
     len: Cell<usize>,
     client: OptionalCell<&'a dyn Client>,
@@ -144,19 +169,19 @@ pub struct I2CBus<'a> {
     status: Cell<BusStatus>,
 }
 
-impl<'a> I2CBus<'a> {
-    pub fn new(i2c: &'a dyn I2CDevice) -> I2CBus {
-        I2CBus {
+impl<'a> I2CMasterBus<'a> {
+    pub fn new(i2c: &'a dyn I2CDevice, addr_buffer: &'static mut [u8]) -> I2CMasterBus<'a> {
+        I2CMasterBus {
             i2c,
             len: Cell::new(0),
             client: OptionalCell::empty(),
-            addr_buffer: OptionalCell::empty(),
+            addr_buffer: OptionalCell::new(addr_buffer),
             status: Cell::new(BusStatus::Idle),
         }
     }
 }
 
-impl<'a> Bus for I2CBus<'a> {
+impl<'a> Bus for I2CMasterBus<'a> {
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
             BusWidth::Bits8 => self
@@ -207,7 +232,7 @@ impl<'a> Bus for I2CBus<'a> {
     }
 }
 
-impl<'a> I2CClient for I2CBus<'a> {
+impl<'a> I2CClient for I2CMasterBus<'a> {
     fn command_complete(&self, buffer: &'static mut [u8], error: Error) {
         let len = match error {
             Error::CommandComplete => self.len.get(),
