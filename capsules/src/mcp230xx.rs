@@ -298,9 +298,7 @@ impl<'a> MCP230xx<'a> {
             // The next register is the IoCon (configuration) register, which
             // we also want to set.
             buffer[i] = 0b00000010; // Make MCP230xx interrupt pin active high.
-            self.i2c
-                .write(buffer, (i + 1) as u8)
-                ;
+            self.i2c.write(buffer, (i + 1) as u8);
             self.state.set(State::EnableInterruptSettings(pin_number));
 
             ReturnCode::SUCCESS

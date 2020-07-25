@@ -22,7 +22,7 @@ impl spi::SpiSlaveClient for SlaveCB {
                        read_buffer: Option<&'static mut [u8]>,
                        len: usize) {
         unsafe {
-            SPI_SLAVE.read_write_bytes(Some(&mut BUF2), None, 8).expect ("spi device error");
+            SPI_SLAVE.read_write_bytes(Some(&mut BUF2), None, 8);
         }
     }
 
@@ -70,7 +70,7 @@ pub unsafe fn spi_slave_dummy_test() {
     //sam4l::spi::SPI_SLAVE.set_active_peripheral(sam4l::spi::Peripheral::Peripheral0);
     SPI_SLAVE.set_client(Some(&SPISLAVECB));
     SPI_SLAVE.init(); // SpiSlave::init
-    SPI_SLAVE.read_write_bytes(Some(&mut BUF2), Some(&mut BUF1), 8).expect ("spi device error");
+    SPI_SLAVE.read_write_bytes(Some(&mut BUF2), Some(&mut BUF1), 8);
     SPI_SLAVE.enable();
 
     // Hint: Temporarily, when switching between master and slave dummy code,

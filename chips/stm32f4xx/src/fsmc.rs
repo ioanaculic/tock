@@ -4,9 +4,9 @@ use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::deferred_call::DeferredCall;
 use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::debug;
 use kernel::hil::bus::{Bus, BusWidth, Client};
 use kernel::{ClockInterface, ReturnCode};
+use kernel::debug;
 
 use crate::deferred_calls::DeferredCallTask;
 
@@ -238,14 +238,19 @@ impl Fsmc {
 
     pub fn handle_interrupt(&self) {
         self.buffer.take().map_or_else(
-            || self.client.map(move |client| {
-                client.command_complete(None, self.len.get());
-            }),
+            || {
+                
+                self.client.map(move |client| {
+                    client.command_complete(None, 0);
+                });
+            },
             |buffer| {
-            self.client.map(move |client| {
-                client.command_complete(Some(buffer), self.len.get());
-            });
-        });
+                
+                self.client.map(move |client| {
+                    client.command_complete(Some(buffer), self.len.get());
+                });
+            },
+        );
     }
 
     #[inline]
@@ -287,38 +292,27 @@ impl ClockInterface for FsmcClock {
 }
 
 impl Bus for Fsmc {
-    fn set_addr(
-        &self,
-        addr_width: BusWidth,
-        addr: usize,
-    ) -> ReturnCode {
-        debug!("write reg {} len {}", addr, len);
+    fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
-            BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => match data_width {
-                BusWidth::Bits8 | BusWidth::Bits16LE | BusWidth::Bits16BE => {
-                    self.write_reg(addr as u16);
-                    DEFERRED_CALL.set();
-                }
-                _ => ReturnCode::ENOSUPPORT,
-            },
+            BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
+                debug! ("write reg");
+                self.write_reg(addr as u16);
+                // self.client.map(move |client| {
+                //     client.command_complete(None, 0);
+                // });
+                DEFERRED_CALL.set();
+                ReturnCode::SUCCESS
+            }
             _ => ReturnCode::ENOSUPPORT,
         }
     }
 
-    fn write(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode {
-        debug!("write {}", len);
+    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         match data_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
                 let bytes = bus_width_in_bytes(&data_width);
-                if len > 0 {
-                    debug!("{:?}", &buffer[0..4]);
-                }
                 if buffer.len() >= len * bytes {
+                    debug! ("write data");
                     for pos in 0..len {
                         let mut data: u16 = 0;
                         for byte in 0..bytes {
@@ -337,21 +331,16 @@ impl Bus for Fsmc {
                     self.bus_width.set(bytes);
                     self.len.set(len);
                     DEFERRED_CALL.set();
-                    Ok(())
+                    ReturnCode::SUCCESS
                 } else {
-                    Err((ReturnCode::ENOMEM, buffer))
+                    ReturnCode::ENOMEM
                 }
             }
             _ => ReturnCode::ENOSUPPORT,
         }
     }
 
-    fn read(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode {
+    fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         match data_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {
                 let bytes = bus_width_in_bytes(&data_width);
@@ -371,9 +360,9 @@ impl Bus for Fsmc {
                     self.bus_width.set(bytes);
                     self.len.set(len);
                     DEFERRED_CALL.set();
-                    Ok(())
+                    ReturnCode::SUCCESS
                 } else {
-                    Err((ReturnCode::ENOMEM, buffer))
+                    ReturnCode::ENOMEM
                 }
             }
             _ => ReturnCode::ENOSUPPORT,

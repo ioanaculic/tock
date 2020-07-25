@@ -24,8 +24,7 @@
 
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
-use kernel::debug;
-use kernel::hil::bus::{self, BusWidth, Client};
+use kernel::hil::bus::{self, BusWidth};
 use kernel::hil::gpio;
 use kernel::hil::screen::{
     self, ScreenClient, ScreenPixelFormat, ScreenRotation, ScreenSetupClient,
@@ -37,7 +36,7 @@ use kernel::{AppId, Callback, Driver};
 const BUFFER_SIZE: usize = 24;
 pub static mut BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct Command {
     pub id: u8,
     pub parameters: Option<&'static [u8]>,
@@ -189,7 +188,7 @@ enum Status {
     SendParametersSlice,
     Delay,
 }
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum SendCommand {
     Nop,
     Default(&'static Command),
@@ -278,7 +277,6 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
 
     fn send_sequence(&self, sequence: CommandSequence) -> ReturnCode {
         if self.status.get() == Status::Idle {
-            debug!("sequence len {}", sequence.len());
             let error = self.sequence_buffer.map_or_else(
                 || panic!("st77xx: send sequence has no sequence buffer"),
                 |sequence_buffer| {
@@ -338,10 +336,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
         if let Some(dc) = self.dc {
             dc.clear();
         }
-        self.bus.set_addr(
-            BusWidth::Bits8,
-            cmd.id as usize,
-        );
+        self.bus.set_addr(BusWidth::Bits8, cmd.id as usize);
     }
 
     fn send_command_slice(&self, cmd: &'static Command, len: usize) {
@@ -350,10 +345,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
             dc.clear();
         }
         self.status.set(Status::SendCommandSlice(len));
-        self.bus.set_addr(
-                    BusWidth::Bits8,
-                    cmd.id as usize,
-                );
+        self.bus.set_addr(BusWidth::Bits8, cmd.id as usize);
     }
 
     fn send_parameters(&self, position: usize, len: usize, repeat: usize) {
@@ -526,32 +518,34 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
     fn do_next_op(&self) {
         match self.status.get() {
             Status::Delay => {
-                self.sequence_buffer.map_or_else(
-                    || panic!("st77xx: do next op has no sequence buffer"),
-                    |sequence| {
-                        // debug!("enter sequence");
-                        // sendf next command in the sequence
                         let position = self.position_in_sequence.get();
+                        
                         self.position_in_sequence
                             .set(self.position_in_sequence.get() + 1);
                         if position < self.sequence_len.get() {
-                            match sequence[position] {
-                                SendCommand::Nop => {
-                                    self.do_next_op();
-                                }
-                                SendCommand::Default(ref cmd) => {
-                                    self.send_command_with_default_parameters(cmd);
-                                }
-                                SendCommand::Position(ref cmd, position, len) => {
-                                    self.send_command(cmd, position, len, 1);
-                                }
-                                SendCommand::Repeat(ref cmd, position, len, repeat) => {
-                                    self.send_command(cmd, position, len, repeat);
-                                }
-                                SendCommand::Slice(ref cmd, len) => {
-                                    self.send_command_slice(cmd, len);
-                                }
-                            };
+                            self.sequence_buffer.map_or_else(
+                                || panic!("st77xx: do next op has no sequence buffer"),
+                                |sequence| {
+                                    
+                                    match sequence[position] {
+                                        SendCommand::Nop => {
+                                            self.do_next_op();
+                                        }
+                                        SendCommand::Default(ref cmd) => {
+                                            self.send_command_with_default_parameters(cmd);
+                                        }
+                                        SendCommand::Position(ref cmd, position, len) => {
+                                            self.send_command(cmd, position, len, 1);
+                                        }
+                                        SendCommand::Repeat(ref cmd, position, len, repeat) => {
+                                            self.send_command(cmd, position, len, repeat);
+                                        }
+                                        SendCommand::Slice(ref cmd, len) => {
+                                            self.send_command_slice(cmd, len);
+                                        }
+                                    };
+                                },
+                            );
                         } else {
                             self.status.set(Status::Idle);
                             self.callback.map(|callback| {
@@ -560,6 +554,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                             if !self.power_on.get() {
                                 self.client.map(|client| {
                                     self.power_on.set(true);
+                                    
                                     client.screen_is_ready();
                                 });
                             } else {
@@ -581,9 +576,8 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
                                 }
                             }
                         }
-                        // debug!("exit sequence");
-                    },
-                );
+                        
+                    
             }
             Status::SendCommand(parameters_position, parameters_length, repeat) => {
                 if repeat == 0 {
@@ -881,7 +875,7 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST77XX<'a, A> {
                 let err = self.set_memory_frame(0, x, y, x + width - 1, y + height - 1);
                 if err == ReturnCode::SUCCESS {
                     self.sequence_buffer.map_or_else(
-                        || panic!("st77xx: write no sequence buffer"),
+                        || panic!("st77xx: set write frame no sequence buffer"),
                         |sequence| {
                             sequence[0] = SendCommand::Position(&CASET, 0, 4);
                             sequence[1] = SendCommand::Position(&RASET, 4, 4);
@@ -901,6 +895,7 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST77XX<'a, A> {
 
     fn write(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         if self.status.get() == Status::Idle {
+            
             self.setup_command.set(false);
             self.write_buffer.replace(buffer);
             let buffer_len = self.buffer.map_or_else(
@@ -921,6 +916,17 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST77XX<'a, A> {
             } else {
                 ReturnCode::ENOMEM
             }
+        } else {
+            ReturnCode::EBUSY
+        }
+    }
+
+    fn write_continue (&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
+        if self.status.get() == Status::Idle {
+            self.setup_command.set(false);
+            self.write_buffer.replace(buffer);
+            self.send_parameters_slice (len);
+            ReturnCode::SUCCESS
         } else {
             ReturnCode::EBUSY
         }
@@ -960,13 +966,13 @@ impl<'a, A: Alarm<'a>> time::AlarmClient for ST77XX<'a, A> {
 impl<'a, A: Alarm<'a>> bus::Client for ST77XX<'a, A> {
     fn command_complete(&self, buffer: Option<&'static mut [u8]>, _len: usize) {
         if let Some(buffer) = buffer {
-        if self.status.get() == Status::SendParametersSlice {
-            self.write_buffer.replace(buffer);
-        } else {
-            self.buffer.replace(buffer);
+            if self.status.get() == Status::SendParametersSlice {
+                self.write_buffer.replace(buffer);
+            } else {
+                self.buffer.replace(buffer);
+            }
         }
-    }
-        // debug!("do next op");
+        
         self.do_next_op();
     }
 }

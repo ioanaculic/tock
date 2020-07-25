@@ -1105,9 +1105,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
         let rbuf = self.spi_rx.take().unwrap();
         wbuf[0] = (reg as u8) | RF233BusCommand::REGISTER_WRITE as u8;
         wbuf[1] = val;
-        self.spi
-            .read_write_bytes(wbuf, Some(rbuf), 2)
-            ;
+        self.spi.read_write_bytes(wbuf, Some(rbuf), 2);
         self.spi_busy.set(true);
 
         ReturnCode::SUCCESS
@@ -1122,9 +1120,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
         let rbuf = self.spi_rx.take().unwrap();
         wbuf[0] = (reg as u8) | RF233BusCommand::REGISTER_READ as u8;
         wbuf[1] = 0;
-        self.spi
-            .read_write_bytes(wbuf, Some(rbuf), 2)
-            ;
+        self.spi.read_write_bytes(wbuf, Some(rbuf), 2);
         self.spi_busy.set(true);
 
         ReturnCode::SUCCESS
@@ -1137,9 +1133,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
 
         let buf_len = radio::PSDU_OFFSET + frame_len as usize;
         buf[0] = RF233BusCommand::FRAME_WRITE as u8;
-        self.spi
-            .read_write_bytes(buf, self.spi_buf.take(), buf_len)
-            ;
+        self.spi.read_write_bytes(buf, self.spi_buf.take(), buf_len);
         self.spi_busy.set(true);
         ReturnCode::SUCCESS
     }
@@ -1152,9 +1146,7 @@ impl<'a, S: spi::SpiMasterDevice> RF233<'a, S> {
         let buf_len = radio::PSDU_OFFSET + frame_len as usize;
         let wbuf = self.spi_buf.take().unwrap();
         wbuf[0] = RF233BusCommand::FRAME_READ as u8;
-        self.spi
-            .read_write_bytes(wbuf, Some(buf), buf_len)
-            ;
+        self.spi.read_write_bytes(wbuf, Some(buf), buf_len);
         self.spi_busy.set(true);
         ReturnCode::SUCCESS
     }

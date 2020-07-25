@@ -1040,7 +1040,7 @@ impl spi::SpiMaster for USART<'_> {
         write_buffer: &'static mut [u8],
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8], Option<&'static mut [u8]>)> {
+    ) -> ReturnCode {
         let usart = &USARTRegManager::new(&self);
 
         self.enable_tx(usart);
@@ -1098,7 +1098,7 @@ impl spi::SpiMaster for USART<'_> {
             });
         }
 
-        Ok(())
+        ReturnCode::SUCCESS
     }
 
     fn write_byte(&self, val: u8) {

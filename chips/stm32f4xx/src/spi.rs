@@ -392,14 +392,13 @@ impl spi::SpiMaster for Spi<'_> {
         write_buffer: &'static mut [u8],
         read_buffer: Option<&'static mut [u8]>,
         len: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8], Option<&'static mut [u8]>)> {
+    ) -> ReturnCode {
         // If busy, don't start
         if self.is_busy() {
-            return Err((ReturnCode::EBUSY, write_buffer, read_buffer));
+            return ReturnCode::EBUSY;
         }
 
-        self.read_write_bytes(Some(write_buffer), read_buffer, len);
-        Ok(())
+        self.read_write_bytes(Some(write_buffer), read_buffer, len)
     }
 
     /// We *only* support 1Mhz. If `rate` is set to any value other than

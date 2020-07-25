@@ -267,33 +267,20 @@ pub unsafe fn reset_handler() {
             spi_mux
         ));
 
-    // let tft = components::st77xx::ST77XXComponent::new(mux_alarm).finalize(
-    //     components::st77xx_component_helper!(
-    //         // screen
-    //         &capsules::st77xx::ST7735,
-    //         // bus
-    //         bus,
-    //         // timer type
-    //         nrf52::rtc::Rtc,
-    //         // dc
-
-    //         Some(&nrf52840::gpio::PORT[GPIO_D3]),
-    //         // reset
-    //         &nrf52840::gpio::PORT[GPIO_D2]
-    //     ),
-    // );
-
-    let tft = components::st7735::ST7735Component::new(mux_alarm).finalize(
-            components::st7735_component_helper!(
-                bus,
-                // timer type
-                nrf52::rtc::Rtc,
-                // dc
-                Some(&nrf52840::gpio::PORT[GPIO_D3]),
-                // reset
-                &nrf52840::gpio::PORT[GPIO_D2]
-            ),
-        );
+    let tft = components::st77xx::ST77XXComponent::new(mux_alarm).finalize(
+        components::st77xx_component_helper!(
+            // screen
+            &capsules::st77xx::ST7735,
+            // bus
+            bus,
+            // timer type
+            nrf52::rtc::Rtc,
+            // dc
+            Some(&nrf52840::gpio::PORT[GPIO_D3]),
+            // reset
+            &nrf52840::gpio::PORT[GPIO_D2]
+        ),
+    );
 
     tft.init();
 

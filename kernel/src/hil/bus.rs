@@ -16,24 +16,10 @@ pub enum BusWidth {
 }
 
 pub trait Bus {
-    fn set_addr(
-        &self,
-        addr_width: BusWidth,
-        addr: usize
-    ) -> ReturnCode;
+    fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode;
 
-    fn write(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode;
-    fn read(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode;
+    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
+    fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
 
     fn set_client(&self, client: &'static dyn Client);
 }

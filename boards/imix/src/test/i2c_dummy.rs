@@ -52,8 +52,7 @@ pub fn i2c_scan_slaves() {
     dev.enable();
 
     debug!("Scanning for I2C devices...");
-    dev.write(i2c_client.dev_id.get(), unsafe { &mut DATA }, 2)
-        ;
+    dev.write(i2c_client.dev_id.get(), unsafe { &mut DATA }, 2);
 }
 
 // ===========================================
@@ -94,8 +93,7 @@ impl hil::i2c::I2CHwMasterClient for AccelClient {
                 buffer[0] = 0x01 as u8; // X-MSB register
                                         // Reading 6 bytes will increment the register pointer through
                                         // X-MSB, X-LSB, Y-MSB, Y-LSB, Z-MSB, Z-LSB
-                dev.write_read(0x1e, buffer, 1, 6)
-                    ;
+                dev.write_read(0x1e, buffer, 1, 6);
                 self.state.set(AccelClientState::ReadingAccelData);
             }
             AccelClientState::ReadingAccelData => {
@@ -118,16 +116,14 @@ impl hil::i2c::I2CHwMasterClient for AccelClient {
                 buffer[0] = 0x01 as u8; // X-MSB register
                                         // Reading 6 bytes will increment the register pointer through
                                         // X-MSB, X-LSB, Y-MSB, Y-LSB, Z-MSB, Z-LSB
-                dev.write_read(0x1e, buffer, 1, 6)
-                    ;
+                dev.write_read(0x1e, buffer, 1, 6);
                 self.state.set(AccelClientState::ReadingAccelData);
             }
             AccelClientState::Deactivating => {
                 debug!("Sensor deactivated ({})", error);
                 debug!("Reading Accel's WHOAMI...");
                 buffer[0] = 0x0D as u8; // 0x0D == WHOAMI register
-                dev.write_read(0x1e, buffer, 1, 1)
-                    ;
+                dev.write_read(0x1e, buffer, 1, 1);
                 self.state.set(AccelClientState::ReadingWhoami);
             }
         }
@@ -177,16 +173,14 @@ impl hil::i2c::I2CHwMasterClient for LiClient {
                 debug!("Reading Lumminance Registers ({})", error);
                 buffer[0] = 0x02 as u8;
                 buffer[0] = 0;
-                dev.write_read(0x44, buffer, 1, 2)
-                    ;
+                dev.write_read(0x44, buffer, 1, 2);
                 self.state.set(LiClientState::ReadingLI);
             }
             LiClientState::ReadingLI => {
                 let intensity = ((buffer[1] as usize) << 8) | buffer[0] as usize;
                 debug!("Light Intensity: {}% ({})", (intensity * 100) >> 16, error);
                 buffer[0] = 0x02 as u8;
-                dev.write_read(0x44, buffer, 1, 2)
-                    ;
+                dev.write_read(0x44, buffer, 1, 2);
                 self.state.set(LiClientState::ReadingLI);
             }
         }

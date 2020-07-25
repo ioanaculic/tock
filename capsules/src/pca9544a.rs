@@ -92,9 +92,7 @@ impl<'a> PCA9544A<'a> {
                 }
             }
 
-            self.i2c
-                .write(buffer, index as u8)
-                ;
+            self.i2c.write(buffer, index as u8);
             self.state.set(State::Done);
 
             ReturnCode::SUCCESS

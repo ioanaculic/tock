@@ -9,7 +9,6 @@ use kernel::common::registers::{
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::hil::i2c;
-use kernel::ReturnCode;
 
 register_structs! {
     pub I2cRegisters {
@@ -395,13 +394,7 @@ impl<'a> hil::i2c::I2CMaster for I2c<'a> {
         regs.ctrl.modify(CTRL::ENABLEHOST::CLEAR);
     }
 
-    fn write_read(
-        &self,
-        addr: u8,
-        data: &'static mut [u8],
-        write_len: u8,
-        read_len: u8,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    fn write_read(&self, addr: u8, data: &'static mut [u8], write_len: u8, read_len: u8) {
         let regs = self.registers;
 
         // Set the FIFO depth and reset the FIFO
@@ -439,16 +432,9 @@ impl<'a> hil::i2c::I2CMaster for I2c<'a> {
         self.read_index.set(0);
 
         self.write_read_data();
-
-        Ok(())
     }
 
-    fn write(
-        &self,
-        addr: u8,
-        data: &'static mut [u8],
-        len: u8,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    fn write(&self, addr: u8, data: &'static mut [u8], len: u8) {
         let regs = self.registers;
 
         // Set the FIFO depth and reset the FIFO
@@ -476,16 +462,9 @@ impl<'a> hil::i2c::I2CMaster for I2c<'a> {
         self.write_index.set(0);
 
         self.write_data();
-
-        Ok(())
     }
 
-    fn read(
-        &self,
-        addr: u8,
-        buffer: &'static mut [u8],
-        len: u8,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
+    fn read(&self, addr: u8, buffer: &'static mut [u8], len: u8) {
         let regs = self.registers;
 
         // Set the FIFO depth and reset the FIFO
@@ -513,7 +492,5 @@ impl<'a> hil::i2c::I2CMaster for I2c<'a> {
         self.read_index.set(0);
 
         self.read_data();
-
-        Ok(())
     }
 }

@@ -104,7 +104,7 @@ impl Chip for Stm32f4xx {
     }
 
     fn has_pending_interrupts(&self) -> bool {
-        unsafe { cortexm4::nvic::has_pending() }
+        unsafe { cortexm4::nvic::has_pending() || deferred_call::has_tasks () }
     }
 
     fn mpu(&self) -> &cortexm4::mpu::MPU {

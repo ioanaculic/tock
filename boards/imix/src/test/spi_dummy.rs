@@ -3,6 +3,7 @@
 use kernel::hil::gpio;
 use kernel::hil::gpio::Configure;
 use kernel::hil::spi::{self, SpiMaster};
+use kernel::ReturnCode;
 
 #[allow(unused_variables, dead_code)]
 pub struct DummyCB {
@@ -24,16 +25,14 @@ impl spi::SpiMasterClient for DummyCB {
     ) {
         unsafe {
             // do actual stuff
-            sam4l::spi::SPI
-                .read_write_bytes(&mut A5, None, A5.len())
-                ;
+            sam4l::spi::SPI.read_write_bytes(&mut A5, None, A5.len());
 
             // FLOP = !FLOP;
             // let len: usize = BUF1.len();
             // if FLOP {
-            //     sam4l::spi::SPI.read_write_bytes(&mut BUF1, Some(&mut BUF2), len).expect ("spi device error");
+            //     sam4l::spi::SPI.read_write_bytes(&mut BUF1, Some(&mut BUF2), len);
             // } else {
-            //     sam4l::spi::SPI.read_write_bytes(&mut BUF2, Some(&mut BUF1), len).expect ("spi device error");
+            //     sam4l::spi::SPI.read_write_bytes(&mut BUF2, Some(&mut BUF1), len);
             // }
         }
     }
@@ -71,7 +70,7 @@ pub unsafe fn spi_dummy_test() {
     sam4l::spi::SPI.set_baud_rate(200000);
 
     let len = BUF2.len();
-    if let Err((code, _, _)) = sam4l::spi::SPI.read_write_bytes(&mut BUF2, Some(&mut BUF1), len) {
+    if sam4l::spi::SPI.read_write_bytes(&mut BUF2, Some(&mut BUF1), len) != ReturnCode::SUCCESS {
         loop {
             sam4l::spi::SPI.write_byte(0xA5);
         }

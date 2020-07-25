@@ -20,7 +20,7 @@ enum BusStatus {
     Idle,
     SetAddress,
     Write,
-    Read
+    Read,
 }
 
 /*********** SPI ************/
@@ -31,7 +31,7 @@ pub struct SpiBus<'a> {
     bus_width: Cell<usize>,
     client: OptionalCell<&'a dyn Client>,
     addr_buffer: OptionalCell<&'static mut [u8]>,
-    status: Cell<BusStatus>
+    status: Cell<BusStatus>,
 }
 
 impl<'a> SpiBus<'a> {
@@ -41,8 +41,8 @@ impl<'a> SpiBus<'a> {
             read_write_buffer: OptionalCell::empty(),
             bus_width: Cell::new(1),
             client: OptionalCell::empty(),
-            addr_buffer: OptionalCell::new (addr_buffer),
-            status: Cell::new (BusStatus::Idle)
+            addr_buffer: OptionalCell::new(addr_buffer),
+            status: Cell::new(BusStatus::Idle),
         }
     }
 
@@ -56,36 +56,28 @@ impl<'a> SpiBus<'a> {
 }
 
 impl<'a> Bus for SpiBus<'a> {
-    fn set_addr(
-        &self,
-        addr_width: BusWidth,
-        addr: usize,
-    ) -> ReturnCode {
+    fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
-            BusWidth::Bits8 => {
-                self.addr_buffer.take().map_or (ReturnCode::ENOMEM, |buffer|{
-                    self.status.set (BusStatus::SetAddress);
+            BusWidth::Bits8 => self
+                .addr_buffer
+                .take()
+                .map_or(ReturnCode::ENOMEM, |buffer| {
+                    self.status.set(BusStatus::SetAddress);
                     buffer[0] = addr as u8;
-                    self.spi.read_write_bytes (buffer, None, 1);
+                    self.spi.read_write_bytes(buffer, None, 1);
                     ReturnCode::SUCCESS
-                })
-            }
+                }),
 
             _ => ReturnCode::ENOSUPPORT,
         }
     }
 
-    fn write(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode {
+    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is sent as is
         let bytes = bus_width_in_bytes(&data_width);
         self.bus_width.set(bytes);
         if buffer.len() >= len * bytes {
-            self.status.set (BusStatus::Write);
+            self.status.set(BusStatus::Write);
             self.spi.read_write_bytes(buffer, None, len * bytes);
             ReturnCode::SUCCESS
         } else {
@@ -93,12 +85,7 @@ impl<'a> Bus for SpiBus<'a> {
         }
     }
 
-    fn read(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode {
+    fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is read as is
         let bytes = bus_width_in_bytes(&data_width);
         self.bus_width.set(bytes);
@@ -109,13 +96,12 @@ impl<'a> Bus for SpiBus<'a> {
                     && write_buffer.len() > 0
                     && buffer.len() > len * bytes
                 {
-                    self.status.set (BusStatus::Read);
-                        self.spi
+                    self.status.set(BusStatus::Read);
+                    self.spi
                         .read_write_bytes(write_buffer, Some(buffer), len * bytes);
-                        ReturnCode::SUCCESS
-                    
+                    ReturnCode::SUCCESS
                 } else {
-                   ReturnCode::ENOMEM
+                    ReturnCode::ENOMEM
                 }
             },
         )
@@ -134,24 +120,25 @@ impl<'a> SpiMasterClient for SpiBus<'a> {
         len: usize,
     ) {
         // debug!("write done {}", len);
-        match self.status.get () {
+        match self.status.get() {
             BusStatus::SetAddress => {
-                self.addr_buffer.replace (write_buffer);
+                self.addr_buffer.replace(write_buffer);
                 self.client
                     .map(move |client| client.command_complete(None, 0));
-            }    
+            }
             BusStatus::Write | BusStatus::Read => {
                 let mut buffer = write_buffer;
                 if let Some(buf) = read_buffer {
                     self.read_write_buffer.replace(buffer);
                     buffer = buf;
                 }
-                self.client
-                    .map(move |client| client.command_complete(Some(buffer), len / self.bus_width.get()));
-                    }
-                    _ => {
-                        panic! ("spi sent an extra read_write_done");
-                    }
+                self.client.map(move |client| {
+                    client.command_complete(Some(buffer), len / self.bus_width.get())
+                });
+            }
+            _ => {
+                panic!("spi sent an extra read_write_done");
+            }
         }
     }
 }
@@ -163,7 +150,7 @@ pub struct I2CBus<'a> {
     len: Cell<usize>,
     client: OptionalCell<&'a dyn Client>,
     addr_buffer: OptionalCell<&'static mut [u8]>,
-    status: Cell<BusStatus>
+    status: Cell<BusStatus>,
 }
 
 impl<'a> I2CBus<'a> {
@@ -172,46 +159,37 @@ impl<'a> I2CBus<'a> {
             i2c,
             len: Cell::new(0),
             client: OptionalCell::empty(),
-            addr_buffer: OptionalCell::empty (),
-            status: Cell::new (BusStatus::Idle)
+            addr_buffer: OptionalCell::empty(),
+            status: Cell::new(BusStatus::Idle),
         }
     }
 }
 
 impl<'a> Bus for I2CBus<'a> {
-    fn set_addr(
-        &self,
-        addr_width: BusWidth,
-        addr: usize,
-    ) -> ReturnCode {
+    fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
-            BusWidth::Bits8 => {
-                self.addr_buffer.take().map_or (ReturnCode::ENOMEM, |buffer|{
+            BusWidth::Bits8 => self
+                .addr_buffer
+                .take()
+                .map_or(ReturnCode::ENOMEM, |buffer| {
                     buffer[0] = addr as u8;
-                    self.status.set (BusStatus::SetAddress);
-                    self.i2c.write (buffer, 1);
+                    self.status.set(BusStatus::SetAddress);
+                    self.i2c.write(buffer, 1);
                     ReturnCode::SUCCESS
-                })
-                   
-            }
+                }),
 
-            _ => ReturnCode::ENOSUPPORT
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
-    fn write(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode {
+    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is sent as is
         let bytes = bus_width_in_bytes(&data_width);
         self.len.set(len * bytes);
         if len * bytes < 255 && buffer.len() >= len * bytes {
             debug!("write len {}", len);
             self.len.set(len);
-            self.status.set (BusStatus::Write);
+            self.status.set(BusStatus::Write);
             self.i2c.write(buffer, (len * bytes) as u8);
             ReturnCode::SUCCESS
         } else {
@@ -219,18 +197,13 @@ impl<'a> Bus for I2CBus<'a> {
         }
     }
 
-    fn read(
-        &self,
-        data_width: BusWidth,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> ReturnCode {
+    fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode {
         // endianess does not matter as the buffer is read as is
         let bytes = bus_width_in_bytes(&data_width);
         self.len.set(len * bytes);
         if len & bytes < 255 && buffer.len() >= len * bytes {
             self.len.set(len);
-            self.status.set (BusStatus::Read);
+            self.status.set(BusStatus::Read);
             self.i2c.read(buffer, (len * bytes) as u8);
             ReturnCode::SUCCESS
         } else {
@@ -249,19 +222,19 @@ impl<'a> I2CClient for I2CBus<'a> {
             Error::CommandComplete => self.len.get(),
             _ => 0,
         };
-        match self.status.get () {
+        match self.status.get() {
             BusStatus::SetAddress => {
-                self.addr_buffer.replace (buffer);
+                self.addr_buffer.replace(buffer);
                 self.client
                     .map(move |client| client.command_complete(None, 0));
-            }    
+            }
             BusStatus::Write | BusStatus::Read => {
                 self.client
-            .map(move |client| client.command_complete(Some(buffer), len));
-                    }
-                    _ => {
-                        panic! ("i2c sent an extra read_write_done");
-                    }
+                    .map(move |client| client.command_complete(Some(buffer), len));
+            }
+            _ => {
+                panic!("i2c sent an extra read_write_done");
+            }
         }
     }
 }
