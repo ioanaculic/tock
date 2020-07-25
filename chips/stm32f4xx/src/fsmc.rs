@@ -249,6 +249,7 @@ impl Fsmc {
     #[inline]
     fn write_reg(&self, addr: u16) {
         self.bank[0].reg.set(addr);
+        #[cfg(all(target_arch = "arm", target_os = "none"))]
         unsafe {
             llvm_asm!("dsb 0xf");
         }
@@ -257,6 +258,7 @@ impl Fsmc {
     #[inline]
     fn write_data(&self, data: u16) {
         self.bank[0].ram.set(data);
+        #[cfg(all(target_arch = "arm", target_os = "none"))]
         unsafe {
             llvm_asm!("dsb 0xf");
         }
