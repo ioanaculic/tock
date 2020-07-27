@@ -281,7 +281,7 @@ impl ClockInterface for FsmcClock {
     }
 }
 
-impl Bus for Fsmc {
+impl Bus<'static> for Fsmc {
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
             BusWidth::Bits8 | BusWidth::Bits16BE | BusWidth::Bits16LE => {

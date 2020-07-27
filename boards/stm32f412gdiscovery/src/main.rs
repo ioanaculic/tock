@@ -577,6 +577,7 @@ pub unsafe fn reset_handler() {
         components::st77xx_component_helper!(
             &capsules::st77xx::ST7789H2,
             // fsmc
+            stm32f412g::fsmc::Fsmc,
             &stm32f412g::fsmc::FSMC,
             // timer type
             stm32f412g::tim2::Tim2,

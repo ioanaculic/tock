@@ -20,7 +20,7 @@
 
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
-use kernel::hil::bus::{self, BusWidth};
+use kernel::hil::bus::{self, Bus, BusWidth};
 use kernel::hil::gpio;
 use kernel::hil::screen::{
     self, ScreenClient, ScreenPixelFormat, ScreenRotation, ScreenSetupClient,
@@ -199,8 +199,8 @@ pub enum SendCommand {
     Slice(&'static Command, usize),
 }
 
-pub struct ST77XX<'a, A: Alarm<'a>> {
-    bus: &'a dyn bus::Bus,
+pub struct ST77XX<'a, A: Alarm<'a>, B: Bus<'a>> {
+    bus: &'a B,
     alarm: &'a A,
     dc: Option<&'a dyn gpio::Pin>,
     reset: &'a dyn gpio::Pin,
@@ -226,16 +226,16 @@ pub struct ST77XX<'a, A: Alarm<'a>> {
     screen: &'static ST77XXScreen,
 }
 
-impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
+impl<'a, A: Alarm<'a>, B: Bus<'a>> ST77XX<'a, A, B> {
     pub fn new(
-        bus: &'a dyn bus::Bus,
+        bus: &'a B,
         alarm: &'a A,
         dc: Option<&'a dyn gpio::Pin>,
         reset: &'a dyn gpio::Pin,
         buffer: &'static mut [u8],
         sequence_buffer: &'static mut [SendCommand],
         screen: &'static ST77XXScreen,
-    ) -> ST77XX<'a, A> {
+    ) -> ST77XX<'a, A, B> {
         if let Some(dc) = dc {
             dc.make_output();
         }
@@ -749,7 +749,7 @@ impl<'a, A: Alarm<'a>> ST77XX<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> Driver for ST77XX<'a, A> {
+impl<'a, A: Alarm<'a>, B: Bus<'a>> Driver for ST77XX<'a, A, B> {
     fn command(&self, command_num: usize, data1: usize, data2: usize, _: AppId) -> ReturnCode {
         match command_num {
             0 => ReturnCode::SUCCESS,
@@ -781,7 +781,7 @@ impl<'a, A: Alarm<'a>> Driver for ST77XX<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> screen::ScreenSetup for ST77XX<'a, A> {
+impl<'a, A: Alarm<'a>, B: Bus<'a>> screen::ScreenSetup for ST77XX<'a, A, B> {
     fn set_client(&self, setup_client: Option<&'static dyn ScreenSetupClient>) {
         if let Some(setup_client) = setup_client {
             self.setup_client.set(setup_client);
@@ -843,7 +843,7 @@ impl<'a, A: Alarm<'a>> screen::ScreenSetup for ST77XX<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> screen::Screen for ST77XX<'a, A> {
+impl<'a, A: Alarm<'a>, B: Bus<'a>> screen::Screen for ST77XX<'a, A, B> {
     fn get_resolution(&self) -> (usize, usize) {
         (self.width.get(), self.height.get())
     }
@@ -949,13 +949,13 @@ impl<'a, A: Alarm<'a>> screen::Screen for ST77XX<'a, A> {
     }
 }
 
-impl<'a, A: Alarm<'a>> time::AlarmClient for ST77XX<'a, A> {
+impl<'a, A: Alarm<'a>, B: Bus<'a>> time::AlarmClient for ST77XX<'a, A, B> {
     fn fired(&self) {
         self.do_next_op();
     }
 }
 
-impl<'a, A: Alarm<'a>> bus::Client for ST77XX<'a, A> {
+impl<'a, A: Alarm<'a>, B: Bus<'a>> bus::Client for ST77XX<'a, A, B> {
     fn command_complete(&self, buffer: Option<&'static mut [u8]>, _len: usize) {
         if let Some(buffer) = buffer {
             if self.status.get() == Status::SendParametersSlice {

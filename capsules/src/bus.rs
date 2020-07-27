@@ -71,7 +71,7 @@ impl<'a> SpiMasterBus<'a> {
     }
 }
 
-impl<'a> Bus for SpiMasterBus<'a> {
+impl<'a> Bus<'a> for SpiMasterBus<'a> {
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
             BusWidth::Bits8 => self
@@ -123,7 +123,7 @@ impl<'a> Bus for SpiMasterBus<'a> {
         )
     }
 
-    fn set_client(&self, client: &'static dyn Client) {
+    fn set_client(&self, client: &'a dyn Client) {
         self.client.replace(client);
     }
 }
@@ -181,7 +181,7 @@ impl<'a> I2CMasterBus<'a> {
     }
 }
 
-impl<'a> Bus for I2CMasterBus<'a> {
+impl<'a> Bus<'a> for I2CMasterBus<'a> {
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode {
         match addr_width {
             BusWidth::Bits8 => self
@@ -227,7 +227,7 @@ impl<'a> Bus for I2CMasterBus<'a> {
         }
     }
 
-    fn set_client(&self, client: &'static dyn Client) {
+    fn set_client(&self, client: &'a dyn Client) {
         self.client.replace(client);
     }
 }

@@ -25,7 +25,7 @@ impl BusWidth {
     }
 }
 
-pub trait Bus {
+pub trait Bus<'a> {
     /// Set the address to write to
     ///
     /// If the underlaying bus does not support addresses (eg UART)
@@ -44,7 +44,7 @@ pub trait Bus {
     /// len specifies the number of data items (the number of bytes is len * data_width.width_in_bytes)
     fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
 
-    fn set_client(&self, client: &'static dyn Client);
+    fn set_client(&self, client: &'a dyn Client);
 }
 
 pub trait Client {

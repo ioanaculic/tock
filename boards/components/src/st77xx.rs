@@ -18,9 +18,10 @@
 //! ```
 use capsules::st77xx::{ST77XXScreen, ST77XX};
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use kernel::component::Component;
-use kernel::hil::bus::Bus;
+use kernel::hil::bus;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
 use kernel::static_init_half;
@@ -28,16 +29,16 @@ use kernel::static_init_half;
 // Setup static space for the objects.
 #[macro_export]
 macro_rules! st77xx_component_helper {
-    ($screen:expr, $bus:expr, $A:ty, $dc:expr, $reset:expr) => {{
+    ($screen:expr, $B: ty, $bus:expr, $A:ty, $dc:expr, $reset:expr) => {{
         use capsules::st77xx::ST77XX;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;
         use core::mem::MaybeUninit;
         use kernel::hil::bus::Bus;
         use kernel::hil::spi::{self, SpiMasterDevice};
-        let st77xx_bus: &'static dyn Bus = $bus;
+        let st77xx_bus: &$B = $bus;
         static mut st77xx_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
-        static mut st77xx: MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, $A>>> =
+        static mut st77xx: MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, $A>, $B>> =
             MaybeUninit::uninit();
         (
             st77xx_bus,
@@ -50,28 +51,32 @@ macro_rules! st77xx_component_helper {
     };};
 }
 
-pub struct ST77XXComponent<A: 'static + time::Alarm<'static>> {
+pub struct ST77XXComponent<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>> {
     alarm_mux: &'static MuxAlarm<'static, A>,
+    _bus: PhantomData<B>,
 }
 
-impl<A: 'static + time::Alarm<'static>> ST77XXComponent<A> {
-    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> ST77XXComponent<A> {
+impl<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>> ST77XXComponent<A, B> {
+    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> ST77XXComponent<A, B> {
         ST77XXComponent {
             alarm_mux: alarm_mux,
+            _bus: PhantomData,
         }
     }
 }
 
-impl<A: 'static + time::Alarm<'static>> Component for ST77XXComponent<A> {
+impl<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>> Component
+    for ST77XXComponent<A, B>
+{
     type StaticInput = (
-        &'static dyn Bus,
+        &'static B,
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
         Option<&'static dyn kernel::hil::gpio::Pin>,
         &'static dyn kernel::hil::gpio::Pin,
-        &'static mut MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, A>>>,
+        &'static mut MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, A>, B>>,
         &'static ST77XXScreen,
     );
-    type Output = &'static ST77XX<'static, VirtualMuxAlarm<'static, A>>;
+    type Output = &'static ST77XX<'static, VirtualMuxAlarm<'static, A>, B>;
 
     unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
         let st77xx_alarm = static_init_half!(
@@ -82,7 +87,7 @@ impl<A: 'static + time::Alarm<'static>> Component for ST77XXComponent<A> {
 
         let st77xx = static_init_half!(
             static_buffer.4,
-            ST77XX<'static, VirtualMuxAlarm<'static, A>>,
+            ST77XX<'static, VirtualMuxAlarm<'static, A>, B>,
             ST77XX::new(
                 static_buffer.0,
                 st77xx_alarm,
