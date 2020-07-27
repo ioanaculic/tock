@@ -14,7 +14,8 @@ macro_rules! spi_bus_component_helper {
     ($S:ty, $select:expr, $spi_mux: expr) => {{
         use capsules::bus::SpiMasterBus;
         use core::mem::{size_of, MaybeUninit};
-        let bus_spi: &'static capsules::virtual_spi::VirtualSpiMasterDevice<'static, $S> =
+        use capsules::virtual_spi::VirtualSpiMasterDevice;
+        let bus_spi: &'static VirtualSpiMasterDevice<'static, $S> =
             components::spi::SpiComponent::new($spi_mux, $select)
                 .finalize(components::spi_component_helper!($S));
         static mut ADDRESS_BUFFER: [u8; size_of::<usize>()] = [0; size_of::<usize>()];
