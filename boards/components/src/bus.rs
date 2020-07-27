@@ -7,6 +7,7 @@ use core::mem::MaybeUninit;
 use kernel::component::Component;
 use kernel::hil::spi;
 use kernel::static_init_half;
+use kernel::hil::i2c;
 
 // Setup static space for the objects.
 #[macro_export]
@@ -27,12 +28,16 @@ macro_rules! spi_bus_component_helper {
 
 #[macro_export]
 macro_rules! i2c_master_bus_component_helper {
-    () => {{
+    ($I: ty, $S: ty, $i2c_mux: expr, $address: expr) => {{
         use capsules::bus::I2CMasterBus;
         use core::mem::{size_of, MaybeUninit};
+        use capsules::virtual_i2c::I2CDevice;
+        let bus_i2c: &'static I2CDevice<'static, $I, $S> =
+            components::i2c::I2CComponent::new($i2c_mux, $address)
+                .finalize(components::i2c_component_helper!($I, $S));
         static mut ADDRESS_BUFFER: [u8; 1] = [0; 1];
-        static mut bus: MaybeUninit<I2CMasterBus<'static>> = MaybeUninit::uninit();
-        (&mut bus, &mut ADDRESS_BUFFER)
+        static mut bus: MaybeUninit<I2CMasterBus<'static, I2CDevice<'static, $I, $S>>> = MaybeUninit::uninit();
+        (&bus_i2c, &mut bus, &mut ADDRESS_BUFFER)
     };};
 }
 
@@ -68,38 +73,37 @@ impl<S: 'static + spi::SpiMaster> Component for SpiMasterBusComponent<S> {
     }
 }
 
-pub struct I2CMasterBusComponent {
-    i2c_mux: &'static MuxI2C<'static>,
-    address: u8,
+pub struct I2CMasterBusComponent<I: 'static + i2c::I2CMaster, S: 'static + i2c::SMBusMaster> {
+    _i2c: PhantomData<I>,
+    _smbus: PhantomData<S>
 }
 
-impl I2CMasterBusComponent {
-    pub fn new(i2c_mux: &'static MuxI2C<'static>, address: u8) -> I2CMasterBusComponent {
+impl<I: 'static + i2c::I2CMaster, S: 'static + i2c::SMBusMaster> I2CMasterBusComponent<I, S> {
+    pub fn new() -> I2CMasterBusComponent<I, S> {
         I2CMasterBusComponent {
-            i2c_mux: i2c_mux,
-            address: address,
+            _i2c: PhantomData,
+            _smbus: PhantomData
         }
     }
 }
 
-impl Component for I2CMasterBusComponent {
+impl<I: 'static + i2c::I2CMaster, S: 'static + i2c::SMBusMaster> Component for I2CMasterBusComponent<I, S> {
     type StaticInput = (
-        &'static mut MaybeUninit<I2CMasterBus<'static, I2CDevice<'static>>>,
+        &'static I2CDevice<'static, I, S>,
+        &'static mut MaybeUninit<I2CMasterBus<'static, I2CDevice<'static, I, S>>>,
         &'static mut [u8],
     );
-    type Output = &'static I2CMasterBus<'static, I2CDevice<'static>>;
+    type Output = &'static I2CMasterBus<'static, I2CDevice<'static, I, S>>;
 
     unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
-        let bus_i2c: &'static I2CDevice<'static> =
-            crate::i2c::I2CComponent::new(self.i2c_mux, self.address)
-                .finalize(crate::i2c_component_helper!());
+        
 
         let bus = static_init_half!(
-            static_buffer.0,
-            I2CMasterBus<'static, I2CDevice<'static>>,
-            I2CMasterBus::new(bus_i2c, static_buffer.1)
+            static_buffer.1,
+            I2CMasterBus<'static, I2CDevice<'static, I, S>>,
+            I2CMasterBus::new(static_buffer.0, static_buffer.2)
         );
-        bus_i2c.set_client(bus);
+        static_buffer.0.set_client(bus);
 
         bus
     }

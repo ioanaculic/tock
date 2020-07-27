@@ -25,7 +25,7 @@ use enum_primitive::cast::FromPrimitive;
 use enum_primitive::enum_from_primitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::gpio;
-use kernel::hil::i2c::{self, Error};
+use kernel::hil::bus::{self, Bus, BusWidth};
 use kernel::hil::touch::{self, GestureEvent, TouchEvent, TouchStatus};
 use kernel::{AppId, Driver, ReturnCode};
 
@@ -48,9 +48,11 @@ static NO_TOUCH: TouchEvent = TouchEvent {
 
 pub static mut EVENTS_BUFFER: [TouchEvent; 2] = [NO_TOUCH, NO_TOUCH];
 
+#[derive(Copy, Clone)]
 enum State {
     Idle,
-    ReadingTouches,
+    ReadingTouchesCmd,
+    ReadingTouchesData,
 }
 
 enum_from_primitive! {
@@ -61,8 +63,8 @@ enum_from_primitive! {
     }
 }
 
-pub struct Ft6x06<'a> {
-    i2c: &'a dyn i2c::I2CDevice,
+pub struct Ft6x06<'a, B: Bus<'a>> {
+    bus: &'a B,
     interrupt_pin: &'a dyn gpio::InterruptPin<'a>,
     touch_client: OptionalCell<&'a dyn touch::TouchClient>,
     gesture_client: OptionalCell<&'a dyn touch::GestureClient>,
@@ -73,17 +75,17 @@ pub struct Ft6x06<'a> {
     events: TakeCell<'static, [TouchEvent]>,
 }
 
-impl<'a> Ft6x06<'a> {
+impl<'a,B: Bus<'a>> Ft6x06<'a, B> {
     pub fn new(
-        i2c: &'a dyn i2c::I2CDevice,
+        bus: &'a B,
         interrupt_pin: &'a dyn gpio::InterruptPin<'a>,
         buffer: &'static mut [u8],
         events: &'static mut [TouchEvent],
-    ) -> Ft6x06<'a> {
+    ) -> Ft6x06<'a, B> {
         // setup and return struct
         interrupt_pin.enable_interrupts(gpio::InterruptEdge::FallingEdge);
         Ft6x06 {
-            i2c: i2c,
+            bus: bus,
             interrupt_pin: interrupt_pin,
             touch_client: OptionalCell::empty(),
             gesture_client: OptionalCell::empty(),
@@ -96,21 +98,30 @@ impl<'a> Ft6x06<'a> {
     }
 }
 
-impl<'a> i2c::I2CClient for Ft6x06<'a> {
-    fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
-        self.state.set(State::Idle);
-        self.num_touches.set((buffer[1] & 0x0F) as usize);
+impl<'a,B: Bus<'a>> bus::Client for Ft6x06<'a, B> {
+    fn command_complete(&self, buffer: Option<&'static mut [u8]>, _len: usize) {
+        match self.state.get () {
+            State::ReadingTouchesCmd => {
+                self.state.set (State::ReadingTouchesData);
+                self.buffer.take().map (|buffer| {
+                    self.bus.read (BusWidth::Bits8, buffer, 15);
+                });
+            }
+            State::ReadingTouchesData => {
+                self.state.set(State::Idle);
+                if let Some(buffer) = buffer {
+        self.num_touches.set((buffer[0] & 0x0F) as usize);
         self.touch_client.map(|client| {
             if self.num_touches.get() <= 2 {
-                let status = match buffer[1] >> 6 {
+                let status = match buffer[0] >> 6 {
                     0x00 => TouchStatus::Pressed,
                     0x01 => TouchStatus::Released,
                     _ => TouchStatus::Released,
                 };
-                let x = (((buffer[2] & 0x0F) as u16) << 8) + (buffer[3] as u16);
-                let y = (((buffer[4] & 0x0F) as u16) << 8) + (buffer[5] as u16);
-                let pressure = Some(buffer[6] as u16);
-                let size = Some(buffer[7] as u16);
+                let x = (((buffer[1] & 0x0F) as u16) << 8) + (buffer[2] as u16);
+                let y = (((buffer[3] & 0x0F) as u16) << 8) + (buffer[4] as u16);
+                let pressure = Some(buffer[5] as u16);
+                let size = Some(buffer[6] as u16);
                 client.touch_event(TouchEvent {
                     status,
                     x,
@@ -140,15 +151,15 @@ impl<'a> i2c::I2CClient for Ft6x06<'a> {
         self.multi_touch_client.map(|client| {
             if self.num_touches.get() <= 2 {
                 for touch_event in 0..self.num_touches.get() {
-                    let status = match buffer[1] >> 6 {
+                    let status = match buffer[0] >> 6 {
                         0x00 => TouchStatus::Pressed,
                         0x01 => TouchStatus::Released,
                         _ => TouchStatus::Released,
                     };
-                    let x = (((buffer[2] & 0x0F) as u16) << 8) + (buffer[3] as u16);
-                    let y = (((buffer[4] & 0x0F) as u16) << 8) + (buffer[5] as u16);
-                    let pressure = Some(buffer[6] as u16);
-                    let size = Some(buffer[7] as u16);
+                    let x = (((buffer[1] & 0x0F) as u16) << 8) + (buffer[2] as u16);
+                    let y = (((buffer[3] & 0x0F) as u16) << 8) + (buffer[4] as u16);
+                    let pressure = Some(buffer[5] as u16);
+                    let size = Some(buffer[6] as u16);
                     self.events.map(|buffer| {
                         buffer[touch_event] = TouchEvent {
                             status,
@@ -168,23 +179,27 @@ impl<'a> i2c::I2CClient for Ft6x06<'a> {
         self.buffer.replace(buffer);
         self.interrupt_pin
             .enable_interrupts(gpio::InterruptEdge::FallingEdge);
+        }
+            }
+            _ => panic! ("ft6x06 is idle")
+        }
+        
     }
 }
 
-impl<'a> gpio::Client for Ft6x06<'a> {
+impl<'a, B: Bus<'a>> gpio::Client for Ft6x06<'a, B> {
     fn fired(&self) {
-        self.buffer.take().map(|buffer| {
+        
             self.interrupt_pin.disable_interrupts();
 
-            self.state.set(State::ReadingTouches);
+            self.state.set(State::ReadingTouchesCmd);
 
-            buffer[0] = Registers::REG_GEST_ID as u8;
-            self.i2c.write_read(buffer, 1, 15);
-        });
+        
+            self.bus.set_addr(BusWidth::Bits8, Registers::REG_GEST_ID as usize);
     }
 }
 
-impl<'a> touch::Touch<'a> for Ft6x06<'a> {
+impl<'a, B: Bus<'a>> touch::Touch<'a> for Ft6x06<'a, B> {
     fn enable(&self) -> ReturnCode {
         ReturnCode::SUCCESS
     }
@@ -198,13 +213,13 @@ impl<'a> touch::Touch<'a> for Ft6x06<'a> {
     }
 }
 
-impl<'a> touch::Gesture<'a> for Ft6x06<'a> {
+impl<'a, B: Bus<'a>> touch::Gesture<'a> for Ft6x06<'a, B> {
     fn set_client(&self, client: &'a dyn touch::GestureClient) {
         self.gesture_client.replace(client);
     }
 }
 
-impl<'a> touch::MultiTouch<'a> for Ft6x06<'a> {
+impl<'a, B: Bus<'a>> touch::MultiTouch<'a> for Ft6x06<'a, B> {
     fn enable(&self) -> ReturnCode {
         ReturnCode::SUCCESS
     }
@@ -250,7 +265,7 @@ impl<'a> touch::MultiTouch<'a> for Ft6x06<'a> {
     }
 }
 
-impl Driver for Ft6x06<'_> {
+impl<'a, B: Bus<'a>> Driver for Ft6x06<'a, B> {
     fn command(&self, command_num: usize, _: usize, _: usize, _: AppId) -> ReturnCode {
         match command_num {
             // is driver present

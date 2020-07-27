@@ -444,6 +444,38 @@ impl i2c::I2CMaster for I2C<'_> {
     }
 }
 
+impl i2c::SMBusMaster for I2C<'_> {
+    fn smbus_write_read(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        write_len: u8,
+        read_len: u8,
+    ) -> Result<(), (Error, &'static mut [u8])> {
+        Err((Error::NotSupported, data))
+    }
+
+   
+    fn smbus_write(
+        &self,
+        addr: u8,
+        data: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (Error, &'static mut [u8])> {
+        Err((Error::NotSupported, data))
+    }
+
+   
+    fn smbus_read(
+        &self,
+        addr: u8,
+        buffer: &'static mut [u8],
+        len: u8,
+    ) -> Result<(), (Error, &'static mut [u8])> {
+        Err((Error::NotSupported, buffer))
+    }
+}
+
 struct I2CClock(rcc::PeripheralClock);
 
 impl ClockInterface for I2CClock {

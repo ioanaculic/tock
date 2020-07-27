@@ -17,6 +17,8 @@ use kernel::hil::gpio;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 use stm32f412g::fsmc::FSMC;
+use capsules::virtual_i2c::I2CDevice;
+use capsules::bus::I2CMasterBus;
 
 /// Support routines for debugging I/O.
 pub mod io;
@@ -51,7 +53,7 @@ struct STM32F412GDiscovery {
     >,
     gpio: &'static capsules::gpio::GPIO<'static, stm32f412g::gpio::Pin<'static>>,
     adc: &'static capsules::adc::Adc<'static, stm32f412g::adc::Adc>,
-    ft6x06: &'static capsules::ft6x06::Ft6x06<'static>,
+    ft6x06: &'static capsules::ft6x06::Ft6x06<'static, I2CMasterBus<'static, I2CDevice<'static, stm32f412g::i2c::I2C<'static>, stm32f412g::i2c::I2C<'static>>>>,
     touch: &'static capsules::touch::Touch<'static>,
     screen: &'static capsules::screen::Screen<'static>,
 }
@@ -531,12 +533,23 @@ pub unsafe fn reset_handler() {
         None,
         dynamic_deferred_caller,
     )
-    .finalize(components::i2c_mux_component_helper!());
+    .finalize(components::i2c_mux_component_helper!(
+        // I2C type
+        stm32f412g::i2c::I2C,
+        // SMBus type
+        stm32f412g::i2c::I2C
+    ));
 
     let ft6x06 = components::ft6x06::Ft6x06Component::new(
         stm32f412g::gpio::PinId::PG05.get_pin().as_ref().unwrap(),
     )
-    .finalize(components::ft6x06_i2c_component_helper!(mux_i2c));
+    .finalize(components::ft6x06_i2c_component_helper!(
+        // I2C type
+        stm32f412g::i2c::I2C,
+        // SMBus type
+        stm32f412g::i2c::I2C, 
+        // I2C Mux
+        mux_i2c));
 
     let touch = components::touch::TouchComponent::new(board_kernel, ft6x06, Some(ft6x06), None)
         .finalize(());

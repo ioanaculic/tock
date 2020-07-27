@@ -18,6 +18,7 @@ use kernel::hil::gpio::Configure;
 use kernel::hil::gpio::Output;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
+use capsules::virtual_i2c::I2CDevice;
 
 /// Support routines for debugging I/O.
 pub mod io;
@@ -54,7 +55,7 @@ struct STM32F3Discovery {
     button: &'static capsules::button::Button<'static, stm32f303xc::gpio::Pin<'static>>,
     ninedof: &'static capsules::ninedof::NineDof<'static>,
     l3gd20: &'static capsules::l3gd20::L3gd20Spi<'static>,
-    lsm303dlhc: &'static capsules::lsm303dlhc::Lsm303dlhcI2C<'static>,
+    lsm303dlhc: &'static capsules::lsm303dlhc::Lsm303dlhcI2C<'static, I2CDevice<'static, stm32f303xc::i2c::I2C<'static>, stm32f303xc::i2c::I2C<'static>>>,
     temp: &'static capsules::temperature::TemperatureSensor<'static>,
     alarm: &'static capsules::alarm::AlarmDriver<
         'static,
@@ -557,10 +558,16 @@ pub unsafe fn reset_handler() {
         None,
         dynamic_deferred_caller,
     )
-    .finalize(components::i2c_mux_component_helper!());
+    .finalize(components::i2c_mux_component_helper!(
+        stm32f303xc::i2c::I2C,
+        stm32f303xc::i2c::I2C
+    ));
 
     let lsm303dlhc = components::lsm303dlhc::Lsm303dlhcI2CComponent::new()
-        .finalize(components::lsm303dlhc_i2c_component_helper!(mux_i2c));
+        .finalize(components::lsm303dlhc_i2c_component_helper!(
+            stm32f303xc::i2c::I2C,
+        stm32f303xc::i2c::I2C,
+            mux_i2c));
 
     lsm303dlhc.configure(
         lsm303dlhc::Lsm303dlhcAccelDataRate::DataRate25Hz,
