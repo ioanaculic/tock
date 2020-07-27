@@ -576,11 +576,14 @@ pub unsafe fn reset_handler() {
     let tft = components::st77xx::ST77XXComponent::new(mux_alarm).finalize(
         components::st77xx_component_helper!(
             &capsules::st77xx::ST7789H2,
-            // fsmc
+            // fsmc type
             stm32f412g::fsmc::Fsmc,
+            // fsmc
             &stm32f412g::fsmc::FSMC,
             // timer type
             stm32f412g::tim2::Tim2,
+            // pin type
+            stm32f412g::gpio::Pin,
             // dc pin (optional)
             None,
             // reset pin

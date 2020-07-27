@@ -13,8 +13,8 @@ use kernel::static_init_half;
 macro_rules! spi_bus_component_helper {
     ($S:ty, $select:expr, $spi_mux: expr) => {{
         use capsules::bus::SpiMasterBus;
-        use core::mem::{size_of, MaybeUninit};
         use capsules::virtual_spi::VirtualSpiMasterDevice;
+        use core::mem::{size_of, MaybeUninit};
         let bus_spi: &'static VirtualSpiMasterDevice<'static, $S> =
             components::spi::SpiComponent::new($spi_mux, $select)
                 .finalize(components::spi_component_helper!($S));
@@ -84,10 +84,10 @@ impl I2CMasterBusComponent {
 
 impl Component for I2CMasterBusComponent {
     type StaticInput = (
-        &'static mut MaybeUninit<I2CMasterBus<'static>>,
+        &'static mut MaybeUninit<I2CMasterBus<'static, I2CDevice<'static>>>,
         &'static mut [u8],
     );
-    type Output = &'static I2CMasterBus<'static>;
+    type Output = &'static I2CMasterBus<'static, I2CDevice<'static>>;
 
     unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
         let bus_i2c: &'static I2CDevice<'static> =
@@ -96,7 +96,7 @@ impl Component for I2CMasterBusComponent {
 
         let bus = static_init_half!(
             static_buffer.0,
-            I2CMasterBus<'static>,
+            I2CMasterBus<'static, I2CDevice<'static>>,
             I2CMasterBus::new(bus_i2c, static_buffer.1)
         );
         bus_i2c.set_client(bus);

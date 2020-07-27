@@ -3,10 +3,27 @@
 //! Usage
 //! -----
 //! ```rust
+//!
+//! let bus = components::bus::SpiMasterBusComponent::new().finalize(
+//!         components::spi_bus_component_helper!(
+//!         // spi type
+//!         stm32f4xx::spi::SPI1,
+//!         // chip select
+//!         &stm32f303xc::gpio::PinId::PE03,
+//!         // spi mux
+//!         spi_mux
+//!     ),
+//! );
+//!
 //! let tft = components::st77xx::ST77XXComponent::new(alarm_mux).finalize(
 //!     components::st7789h2_component_helper!(
-//!         // bus (&'static dyn Bus)
-//!         bus
+//!         // bus type
+//!         capsules::bus::SpiMasterBus<
+//!             'static,
+//!             VirtualSpiMasterDevice<'static, stm32f4xx::spi::SPI1>,
+//!         >,
+//!         // bus
+//!         &bus
 //!         // timer type
 //!         stm32f4xx::tim2::Tim2,
 //!         // dc pin optional
@@ -22,6 +39,7 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use kernel::component::Component;
 use kernel::hil::bus;
+use kernel::hil::gpio;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
 use kernel::static_init_half;
@@ -29,7 +47,7 @@ use kernel::static_init_half;
 // Setup static space for the objects.
 #[macro_export]
 macro_rules! st77xx_component_helper {
-    ($screen:expr, $B: ty, $bus:expr, $A:ty, $dc:expr, $reset:expr) => {{
+    ($screen:expr, $B: ty, $bus:expr, $A:ty, $P:ty, $dc:expr, $reset:expr) => {{
         use capsules::st77xx::ST77XX;
         use capsules::virtual_alarm::VirtualMuxAlarm;
         use capsules::virtual_spi::VirtualSpiMasterDevice;
@@ -38,7 +56,7 @@ macro_rules! st77xx_component_helper {
         use kernel::hil::spi::{self, SpiMasterDevice};
         let st77xx_bus: &$B = $bus;
         static mut st77xx_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
-        static mut st77xx: MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, $A>, $B>> =
+        static mut st77xx: MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, $A>, $B, $P>> =
             MaybeUninit::uninit();
         (
             st77xx_bus,
@@ -51,32 +69,40 @@ macro_rules! st77xx_component_helper {
     };};
 }
 
-pub struct ST77XXComponent<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>> {
+pub struct ST77XXComponent<
+    A: 'static + time::Alarm<'static>,
+    B: 'static + bus::Bus<'static>,
+    P: 'static + gpio::Pin,
+> {
     alarm_mux: &'static MuxAlarm<'static, A>,
     _bus: PhantomData<B>,
+    _pin: PhantomData<P>,
 }
 
-impl<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>> ST77XXComponent<A, B> {
-    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> ST77XXComponent<A, B> {
+impl<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>, P: 'static + gpio::Pin>
+    ST77XXComponent<A, B, P>
+{
+    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> ST77XXComponent<A, B, P> {
         ST77XXComponent {
             alarm_mux: alarm_mux,
             _bus: PhantomData,
+            _pin: PhantomData,
         }
     }
 }
 
-impl<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>> Component
-    for ST77XXComponent<A, B>
+impl<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>, P: 'static + gpio::Pin>
+    Component for ST77XXComponent<A, B, P>
 {
     type StaticInput = (
         &'static B,
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
-        Option<&'static dyn kernel::hil::gpio::Pin>,
-        &'static dyn kernel::hil::gpio::Pin,
-        &'static mut MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, A>, B>>,
+        Option<&'static P>,
+        &'static P,
+        &'static mut MaybeUninit<ST77XX<'static, VirtualMuxAlarm<'static, A>, B, P>>,
         &'static ST77XXScreen,
     );
-    type Output = &'static ST77XX<'static, VirtualMuxAlarm<'static, A>, B>;
+    type Output = &'static ST77XX<'static, VirtualMuxAlarm<'static, A>, B, P>;
 
     unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
         let st77xx_alarm = static_init_half!(
@@ -87,7 +113,7 @@ impl<A: 'static + time::Alarm<'static>, B: 'static + bus::Bus<'static>> Componen
 
         let st77xx = static_init_half!(
             static_buffer.4,
-            ST77XX<'static, VirtualMuxAlarm<'static, A>, B>,
+            ST77XX<'static, VirtualMuxAlarm<'static, A>, B, P>,
             ST77XX::new(
                 static_buffer.0,
                 st77xx_alarm,
