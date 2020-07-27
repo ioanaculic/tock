@@ -18,7 +18,8 @@ macro_rules! spi_bus_component_helper {
             components::spi::SpiComponent::new($spi_mux, $select)
                 .finalize(components::spi_component_helper!($S));
         static mut ADDRESS_BUFFER: [u8; size_of::<usize>()] = [0; size_of::<usize>()];
-        static mut bus: MaybeUninit<SpiMasterBus<'static>> = MaybeUninit::uninit();
+        static mut bus: MaybeUninit<SpiMasterBus<'static, VirtualSpiMasterDevice<'static, $S>>> =
+            MaybeUninit::uninit();
         (&bus_spi, &mut bus, &mut ADDRESS_BUFFER)
     };};
 }
@@ -49,15 +50,15 @@ impl<S: 'static + spi::SpiMaster> SpiMasterBusComponent<S> {
 impl<S: 'static + spi::SpiMaster> Component for SpiMasterBusComponent<S> {
     type StaticInput = (
         &'static VirtualSpiMasterDevice<'static, S>,
-        &'static mut MaybeUninit<SpiMasterBus<'static>>,
+        &'static mut MaybeUninit<SpiMasterBus<'static, VirtualSpiMasterDevice<'static, S>>>,
         &'static mut [u8],
     );
-    type Output = &'static SpiMasterBus<'static>;
+    type Output = &'static SpiMasterBus<'static, VirtualSpiMasterDevice<'static, S>>;
 
     unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
         let bus = static_init_half!(
             static_buffer.1,
-            SpiMasterBus<'static>,
+            SpiMasterBus<'static, VirtualSpiMasterDevice<'static, S>>,
             SpiMasterBus::new(static_buffer.0, static_buffer.2)
         );
         static_buffer.0.set_client(bus);
