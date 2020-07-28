@@ -542,13 +542,13 @@ pub unsafe fn reset_handler() {
     l3gd20.power_on();
 
     let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
-    let grant_temperature = board_kernel.create_grant(&grant_cap);
+    // let grant_temperature = board_kernel.create_grant(&grant_cap);
 
-    let temp = static_init!(
-        capsules::temperature::TemperatureSensor<'static>,
-        capsules::temperature::TemperatureSensor::new(l3gd20, grant_temperature)
-    );
-    kernel::hil::sensors::TemperatureDriver::set_client(l3gd20, temp);
+    // let temp = static_init!(
+    //     capsules::temperature::TemperatureSensor<'static>,
+    //     capsules::temperature::TemperatureSensor::new(l3gd20, grant_temperature)
+    // );
+    // kernel::hil::sensors::TemperatureDriver::set_client(l3gd20, temp);
 
     // LSM303DLHC
 
@@ -604,7 +604,27 @@ pub unsafe fn reset_handler() {
             &mut capsules::adc::ADC_BUFFER3
         )
     );
-    stm32f303xc::adc::ADC1.set_client(adc);
+
+    let adc_mux = components::adc::AdcMuxComponent::new(&stm32f303xc::adc::ADC1)
+        .finalize(components::adc_mux_component_helper!(stm32f303xc::adc::Adc));
+
+    let temp_sensor = components::temperature_stm::TemperatureSTMComponent::new(4.6, 1.52)
+        .finalize(components::temperaturestm_adc_component_helper!(
+            // spi type
+            stm32f303xc::adc::Adc,
+            // chip select
+            stm32f303xc::adc::Channel::Channel16,
+            // spi mux
+            adc_mux
+        ));
+
+    let grant_temperature = board_kernel.create_grant(&grant_cap);
+
+    let temp = static_init!(
+        capsules::temperature::TemperatureSensor<'static>,
+        capsules::temperature::TemperatureSensor::new(temp_sensor, grant_temperature)
+    );
+    kernel::hil::sensors::TemperatureDriver::set_client(temp_sensor, temp);
 
     let stm32f3discovery = STM32F3Discovery {
         console: console,

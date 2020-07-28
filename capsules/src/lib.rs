@@ -62,9 +62,14 @@ pub mod si7021;
 pub mod spi;
 pub mod st7735;
 pub mod temperature;
+<<<<<<< HEAD
 pub mod touch;
+=======
+pub mod temperature_stm;
+>>>>>>> 1138b6c1cae247bc10a30ba0f81ca0cbca405069
 pub mod tsl2561;
 pub mod usb;
+pub mod virtual_adc;
 pub mod virtual_alarm;
 pub mod virtual_digest;
 pub mod virtual_flash;
