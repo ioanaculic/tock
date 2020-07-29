@@ -67,6 +67,7 @@ impl<'a, C: Chip> Scheduler<C> for RoundRobinSched<'a> {
             let timeslice = if self.last_rescheduled.get() {
                 self.time_remaining.get()
             } else {
+                self.time_remaining.set(Self::DEFAULT_TIMESLICE_US);
                 Self::DEFAULT_TIMESLICE_US
             };
             assert!(timeslice != 0);
@@ -78,7 +79,12 @@ impl<'a, C: Chip> Scheduler<C> for RoundRobinSched<'a> {
     fn result(&self, result: StoppedExecutingReason, execution_time_us: Option<u32>) {
         let execution_time_us = execution_time_us.unwrap(); // should never fail
         self.time_remaining
-            .set(self.time_remaining.get() - execution_time_us);
+            .set(if self.time_remaining.get() >= execution_time_us {
+                self.time_remaining.get() - execution_time_us
+            } else {
+                // this should be 0 but assert in `next` will fault
+                1
+            });
         let reschedule = match result {
             StoppedExecutingReason::KernelPreemption => true,
             _ => false,
