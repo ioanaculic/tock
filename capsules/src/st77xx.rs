@@ -616,6 +616,7 @@ impl<'a, A: Alarm<'a>, B: ScreenBus<'a>, P: Pin> ST77XX<'a, A, B, P> {
                 },
             );
             self.setup_command.set(true);
+            self.rotation.set(rotation);
             self.send_command(&MADCTL, 0, 1, 1);
             ReturnCode::SUCCESS
         } else {

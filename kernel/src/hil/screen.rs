@@ -1,5 +1,7 @@
 //! Interface for screens and displays.
 use crate::returncode::ReturnCode;
+use core::ops::Add;
+use core::ops::Sub;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum ScreenRotation {
@@ -7,6 +9,54 @@ pub enum ScreenRotation {
     Rotated90,
     Rotated180,
     Rotated270,
+}
+
+impl Add for ScreenRotation {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        match (self, other) {
+            (ScreenRotation::Normal, _) => other,
+            (_, ScreenRotation::Normal) => self,
+            (ScreenRotation::Rotated90, ScreenRotation::Rotated90) => ScreenRotation::Rotated180,
+            (ScreenRotation::Rotated90, ScreenRotation::Rotated180) => ScreenRotation::Rotated270,
+            (ScreenRotation::Rotated90, ScreenRotation::Rotated270) => ScreenRotation::Normal,
+
+            (ScreenRotation::Rotated180, ScreenRotation::Rotated90) => ScreenRotation::Rotated270,
+            (ScreenRotation::Rotated180, ScreenRotation::Rotated180) => ScreenRotation::Normal,
+            (ScreenRotation::Rotated180, ScreenRotation::Rotated270) => ScreenRotation::Rotated90,
+
+            (ScreenRotation::Rotated270, ScreenRotation::Rotated90) => ScreenRotation::Normal,
+            (ScreenRotation::Rotated270, ScreenRotation::Rotated180) => ScreenRotation::Rotated90,
+            (ScreenRotation::Rotated270, ScreenRotation::Rotated270) => ScreenRotation::Rotated180,
+        }
+    }
+}
+
+impl Sub for ScreenRotation {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        match (self, other) {
+            (_, ScreenRotation::Normal) => self,
+
+            (ScreenRotation::Normal, ScreenRotation::Rotated90) => ScreenRotation::Rotated270,
+            (ScreenRotation::Normal, ScreenRotation::Rotated180) => ScreenRotation::Rotated180,
+            (ScreenRotation::Normal, ScreenRotation::Rotated270) => ScreenRotation::Rotated90,
+
+            (ScreenRotation::Rotated90, ScreenRotation::Rotated90) => ScreenRotation::Normal,
+            (ScreenRotation::Rotated90, ScreenRotation::Rotated180) => ScreenRotation::Rotated270,
+            (ScreenRotation::Rotated90, ScreenRotation::Rotated270) => ScreenRotation::Rotated180,
+
+            (ScreenRotation::Rotated180, ScreenRotation::Rotated90) => ScreenRotation::Rotated90,
+            (ScreenRotation::Rotated180, ScreenRotation::Rotated180) => ScreenRotation::Normal,
+            (ScreenRotation::Rotated180, ScreenRotation::Rotated270) => ScreenRotation::Rotated270,
+
+            (ScreenRotation::Rotated270, ScreenRotation::Rotated90) => ScreenRotation::Rotated180,
+            (ScreenRotation::Rotated270, ScreenRotation::Rotated180) => ScreenRotation::Rotated90,
+            (ScreenRotation::Rotated270, ScreenRotation::Rotated270) => ScreenRotation::Normal,
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]
