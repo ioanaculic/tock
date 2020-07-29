@@ -1,6 +1,7 @@
 //! Interface for screens and displays.
 use crate::returncode::ReturnCode;
 
+#[derive(Copy, Clone, PartialEq)]
 pub enum ScreenRotation {
     Normal,
     Rotated90,

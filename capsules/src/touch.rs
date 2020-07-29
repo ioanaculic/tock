@@ -12,7 +12,7 @@
 //! ```
 
 use core::mem;
-// use kernel::debug;
+use kernel::debug;
 use kernel::hil;
 use kernel::hil::screen::ScreenRotation;
 use kernel::hil::touch::{GestureEvent, TouchEvent, TouchStatus};
@@ -151,10 +151,10 @@ impl<'a> hil::touch::TouchClient for Touch<'a> {
     fn touch_event(&self, mut event: TouchEvent) {
         // update rotation if there is a screen attached
         self.update_rotation(&mut event);
-        // debug!(
-        //     "touch {:?} x {} y {} size {:?} pressure {:?}",
-        //     event.status, event.x, event.y, event.size, event.pressure
-        // );
+        debug!(
+            "touch {:?} x {} y {} size {:?} pressure {:?}",
+            event.status, event.x, event.y, event.size, event.pressure
+        );
         for app in self.apps.iter() {
             app.enter(|app, _| {
                 app.touch_callback.map(|mut callback| {

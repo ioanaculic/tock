@@ -393,6 +393,8 @@ pub struct ST77XX<'a, A: Alarm<'a>, B: ScreenBus<'a>, P: Pin> {
     command: Cell<&'static Command>,
     buffer: TakeCell<'static, [u8]>,
 
+    rotation: Cell<ScreenRotation>,
+
     power_on: Cell<bool>,
 
     write_buffer: TakeCell<'static, [u8]>,
@@ -436,6 +438,8 @@ impl<'a, A: Alarm<'a>, B: ScreenBus<'a>, P: Pin> ST77XX<'a, A, B, P> {
             position_in_sequence: Cell::new(0),
             command: Cell::new(&NOP),
             buffer: TakeCell::new(buffer),
+
+            rotation: Cell::new(ScreenRotation::Normal),
 
             power_on: Cell::new(false),
 
@@ -1027,7 +1031,7 @@ impl<'a, A: Alarm<'a>, B: ScreenBus<'a>, P: Pin> screen::Screen for ST77XX<'a, A
     }
 
     fn get_rotation(&self) -> ScreenRotation {
-        ScreenRotation::Normal
+        self.rotation.get()
     }
 
     fn set_write_frame(&self, x: usize, y: usize, width: usize, height: usize) -> ReturnCode {
