@@ -23,10 +23,10 @@ pub trait Bus8080<'a> {
     fn set_addr(&self, addr_width: BusWidth, addr: usize) -> ReturnCode;
 
     /// Write data items to the previously set address
-    fn write(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
+    fn write(&self, data_width: BusWidth, buffer: &'a mut [u8], len: usize) -> ReturnCode;
 
     /// Read data items from the previously set address
-    fn read(&self, data_width: BusWidth, buffer: &'static mut [u8], len: usize) -> ReturnCode;
+    fn read(&self, data_width: BusWidth, buffer: &'a mut [u8], len: usize) -> ReturnCode;
 
     fn set_client(&self, client: &'a dyn Client);
 }
