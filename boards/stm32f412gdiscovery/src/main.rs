@@ -555,8 +555,6 @@ pub unsafe fn reset_handler() {
             stm32f412g::tim2::Tim2,
             // pin type
             stm32f412g::gpio::Pin,
-            // dc pin (optional)
-            None,
             // reset pin
             stm32f412g::gpio::PinId::PD11.get_pin().as_ref().unwrap()
         ),
