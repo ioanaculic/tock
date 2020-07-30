@@ -62,8 +62,8 @@ macro_rules! st77xx_spi_component_helper {
             components::spi::SpiComponent::new($spi_mux, $select)
                 .finalize(components::spi_component_helper!($S));
 
-        let st77xx_bus: &'static SpiScreenBus<'static, $S> = static_init!(
-            SpiScreenBus<'static, $S>,
+        let st77xx_bus: &'static SpiScreenBus<'static, VirtualSpiMasterDevice<'static, $S>> = static_init!(
+            SpiScreenBus<'static, VirtualSpiMasterDevice<'static, $S>>,
             SpiScreenBus::new(bus_spi, &mut COMMAND_BUFFER)
         );
 
@@ -71,12 +71,12 @@ macro_rules! st77xx_spi_component_helper {
 
         static mut st77xx_alarm: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut st77xx: MaybeUninit<
-            ST77XX<'static, VirtualMuxAlarm<'static, $A>, SpiScreenBus<'static, $S>, $P>,
+            ST77XX<'static, VirtualMuxAlarm<'static, $A>, SpiScreenBus<'static, VirtualSpiMasterDevice<'static, $S>>, $P>,
         > = MaybeUninit::uninit();
         (
             st77xx_bus,
             &mut st77xx_alarm,
-            $dc,
+            Some($dc),
             $reset,
             &mut st77xx,
             $screen,
@@ -86,7 +86,7 @@ macro_rules! st77xx_spi_component_helper {
 
 #[macro_export]
 macro_rules! st77xx_bus_8080_component_helper {
-    ($screen:expr, $B: ty, $bus: expr, $width: expr,  $A:ty, $P:ty, $dc:expr, $reset:expr) => {{
+    ($screen:expr, $B: ty, $bus: expr, $width: expr,  $A:ty, $P:ty, $reset:expr) => {{
         use capsules::st77xx::{Bus8080ScreenBus, ST77XX};
         use core::mem::MaybeUninit;
         use kernel::hil::bus8080::Bus8080;
@@ -108,7 +108,7 @@ macro_rules! st77xx_bus_8080_component_helper {
         (
             st77xx_bus,
             &mut st77xx_alarm,
-            $dc,
+            None,
             $reset,
             &mut st77xx,
             $screen,
