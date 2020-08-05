@@ -1,6 +1,7 @@
 #![no_std]
 #![feature(const_in_array_repeat_expressions)]
 
+pub mod adc;
 pub mod alarm;
 pub mod analog_comparator;
 pub mod button;
@@ -35,4 +36,5 @@ pub mod si7021;
 pub mod spi;
 pub mod st77xx;
 pub mod temperature;
+pub mod temperature_stm;
 pub mod touch;
