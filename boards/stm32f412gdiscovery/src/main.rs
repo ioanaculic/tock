@@ -519,7 +519,7 @@ pub unsafe fn reset_handler() {
             &mut capsules::adc::ADC_BUFFER3
         )
     );
-    stm32f412g::adc::ADC1.set_client(adc);
+    // stm32f412g::adc::ADC1.set_client(adc);
 
     let stm32f412g = STM32F412GDiscovery {
         console: console,
