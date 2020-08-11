@@ -57,6 +57,7 @@ struct STM32F412GDiscovery {
     ft6x06: &'static capsules::ft6x06::Ft6x06<'static>,
     touch: &'static capsules::touch::Touch<'static>,
     screen: &'static capsules::screen::Screen<'static>,
+    temp: &'static capsules::temperature::TemperatureSensor<'static>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -72,6 +73,7 @@ impl Platform for STM32F412GDiscovery {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
+            capsules::temperature::DRIVER_NUM => f(Some(self.temp)),
             capsules::adc::DRIVER_NUM => f(Some(self.adc)),
             capsules::ft6x06::DRIVER_NUM => f(Some(self.ft6x06)),
             capsules::touch::DRIVER_NUM => f(Some(self.touch)),
@@ -638,6 +640,7 @@ pub unsafe fn reset_handler() {
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
         led: led,
         button: button,
+        temp: temp,
         alarm: alarm,
         gpio: gpio,
         adc: adc_syscall,
