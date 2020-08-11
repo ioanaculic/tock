@@ -49,6 +49,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 /// capsules for this platform.
 struct STM32F3Discovery {
     console: &'static capsules::console::Console<'static>,
+    console_esp: &'static capsules::esp_serial::EspSerial<'static>,
     ipc: kernel::ipc::IPC,
     gpio: &'static capsules::gpio::GPIO<'static, stm32f303xc::gpio::Pin<'static>>,
     led: &'static capsules::led::LED<'static, stm32f303xc::gpio::Pin<'static>>,
@@ -72,6 +73,7 @@ impl Platform for STM32F3Discovery {
     {
         match driver_num {
             capsules::console::DRIVER_NUM => f(Some(self.console)),
+            capsules::esp_serial::DRIVER_NUM => f(Some(self.console_esp)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
@@ -331,28 +333,30 @@ pub unsafe fn reset_handler() {
 
     // Setup the console.
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
+
+    let console_esp =
+        components::esp_serial_component::ESPSerialComponent::new(board_kernel, uart_mux)
+            .finalize(());
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
-
+    use capsules::virtual_uart::UartDevice;
+    use kernel::hil;
     // // Setup the process inspection console
-    // let process_console_uart = static_init!(UartDevice, UartDevice::new(mux_uart, true));
-    // process_console_uart.setup();
-    // pub struct ProcessConsoleCapability;
-    // unsafe impl capabilities::ProcessManagementCapability for ProcessConsoleCapability {}
-    // let process_console = static_init!(
-    //     capsules::process_console::ProcessConsole<'static, ProcessConsoleCapability>,
-    //     capsules::process_console::ProcessConsole::new(
-    //         process_console_uart,
-    //         &mut capsules::process_console::WRITE_BUF,
-    //         &mut capsules::process_console::READ_BUF,
-    //         &mut capsules::process_console::COMMAND_BUF,
-    //         board_kernel,
-    //         ProcessConsoleCapability,
-    //     )
-    // );
-    // hil::uart::Transmit::set_transmit_client(process_console_uart, process_console);
-    // hil::uart::Receive::set_receive_client(process_console_uart, process_console);
-    // process_console.start();
+    let process_console_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
+    process_console_uart.setup();
+    let grant_cap2 = create_capability!(capabilities::MemoryAllocationCapability);
+    let grant_console = board_kernel.create_grant(&grant_cap2);
+    let process_console = static_init!(
+        capsules::esp_serial::EspSerial,
+        capsules::esp_serial::EspSerial::new(
+            process_console_uart,
+            &mut capsules::esp_serial::WRITE_BUF,
+            &mut capsules::esp_serial::READ_BUF,
+            grant_console,
+        )
+    );
+    hil::uart::Transmit::set_transmit_client(process_console_uart, process_console);
+    hil::uart::Receive::set_receive_client(process_console_uart, process_console);
 
     // LEDs
 
@@ -609,6 +613,7 @@ pub unsafe fn reset_handler() {
 
     let stm32f3discovery = STM32F3Discovery {
         console: console,
+        console_esp: console_esp,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
         gpio: gpio,
         led: led,

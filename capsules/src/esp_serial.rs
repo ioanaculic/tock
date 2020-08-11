@@ -1,6 +1,8 @@
 /// Syscall driver number.
 use crate::driver;
+use core::cell::Cell;
 use core::cmp;
+use core::str;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::debug;
 use kernel::hil::uart;
@@ -20,8 +22,23 @@ pub struct App {
     read_len: usize,
 }
 
-pub static mut WRITE_BUF: [u8; 64] = [0; 64];
-pub static mut READ_BUF: [u8; 64] = [0; 64];
+pub static mut WRITE_BUF: [u8; 128] = [0; 128];
+pub static mut READ_BUF: [u8; 128] = [0; 128];
+pub static mut HELPER_BUF: [u8; 128] = [0; 128];
+
+pub struct Link {
+    linkId: usize,
+    app: OptionalCell<AppId>,
+}
+
+impl Link {
+    pub fn new(id: usize) -> Link {
+        Link {
+            linkId: id,
+            app: OptionalCell::empty(),
+        }
+    }
+}
 
 pub struct EspSerial<'a> {
     uart: &'a dyn uart::UartData<'a>,
@@ -30,7 +47,12 @@ pub struct EspSerial<'a> {
     tx_buffer: TakeCell<'static, [u8]>,
     rx_in_progress: OptionalCell<AppId>,
     rx_buffer: TakeCell<'static, [u8]>,
+    rx_buffer_helper: TakeCell<'static, [u8]>,
+    helper_pos: Cell<usize>,
     connected: OptionalCell<bool>,
+    tx_in_progress_helper: Cell<bool>,
+    new_line: Cell<bool>,
+    links: [&'a Link; 5],
 }
 
 impl<'a> EspSerial<'a> {
@@ -38,30 +60,48 @@ impl<'a> EspSerial<'a> {
         uart: &'a dyn uart::UartData<'a>,
         tx_buffer: &'static mut [u8],
         rx_buffer: &'static mut [u8],
+        rx_buffer_helper: &'static mut [u8],
+        links: [&'static Link; 5],
         grant: Grant<App>,
     ) -> EspSerial<'a> {
-        EspSerial {
+        let esp = EspSerial {
             uart: uart,
             apps: grant,
             tx_in_progress: OptionalCell::empty(),
             tx_buffer: TakeCell::new(tx_buffer),
             rx_in_progress: OptionalCell::empty(),
             rx_buffer: TakeCell::new(rx_buffer),
+            rx_buffer_helper: TakeCell::new(rx_buffer_helper),
+            helper_pos: Cell::new(0),
             connected: OptionalCell::empty(),
-        }
+            tx_in_progress_helper: Cell::new(false),
+            new_line: Cell::new(false),
+            links: links,
+        };
+        esp.rx_buffer.take().map(|buffer| {
+            let (_err, _opt) = esp.uart.receive_buffer(buffer, 1);
+        });
+        esp
     }
 
-    fn send_bind(&self, app_id: AppId, app: &mut App, len: usize) -> ReturnCode {
-        if self.connected.is_none() {
-            self.connected.set(true);
-            self.send_new(app_id, app, len)
-        } else {
-            ReturnCode::EBUSY
+    fn get_linkid(&self, app_id: AppId) -> usize {
+        let mut return_val = 404;
+        for i in 0..self.links.len() {
+            if self.links[i].app.is_none() {
+                self.links[i].app.set(app_id);
+                return_val = i;
+                break;
+            }
         }
+        return_val as usize
+    }
+    fn send_bind(&self, app_id: AppId, app: &mut App, len: usize, link_id: usize) -> ReturnCode {
+        self.links[link_id].app.set(app_id);
+        self.send_new(app_id, app, len)
     }
 
-    fn close_connection(&self, app_id: AppId, app: &mut App, len: usize) -> ReturnCode {
-        self.connected.clear();
+    fn close_connection(&self, app_id: AppId, app: &mut App, len: usize, link_id: usize) -> ReturnCode {
+        self.links[link_id].app.clear();
         self.send_new(app_id, app, len)
     }
 
@@ -98,9 +138,10 @@ impl<'a> EspSerial<'a> {
     fn send(&self, app_id: AppId, app: &mut App, slice: AppSlice<Shared, u8>) {
         if self.tx_in_progress.is_none() {
             self.tx_in_progress.set(app_id);
+            self.rx_in_progress.set(app_id);
             self.tx_buffer.take().map(|buffer| {
                 let mut transaction_len = app.write_remaining;
-                for (i, c) in slice.as_ref()[slice.len() - app.write_remaining..slice.len()]
+                for (i, c) in slice.as_ref()[0..cmp::min(app.write_remaining, slice.len())]
                     .iter()
                     .enumerate()
                 {
@@ -108,25 +149,21 @@ impl<'a> EspSerial<'a> {
                         break;
                     }
                     buffer[i] = *c;
-                    // debug!("{}", *c);
                 }
-
                 // Check if everything we wanted to print
                 // fit in the buffer.
                 if app.write_remaining > buffer.len() {
                     transaction_len = buffer.len();
                     app.write_remaining -= buffer.len();
-                    app.write_buffer = Some(slice);
                 } else {
                     app.write_remaining = 0;
                 }
-
                 let (_err, _opt) = self.uart.transmit_buffer(buffer, transaction_len);
             });
         } else {
             app.pending_write = true;
-            app.write_buffer = Some(slice);
         }
+        app.write_buffer = Some(slice);
     }
 
     /// Internal helper function for starting a receive operation
@@ -159,6 +196,106 @@ impl<'a> EspSerial<'a> {
                 ReturnCode::EINVAL
             }
         }
+    }
+
+    fn write(&self, byte: u8) -> ReturnCode {
+        if self.tx_in_progress_helper.get() {
+            ReturnCode::EBUSY
+        } else {
+            self.tx_in_progress_helper.set(true);
+            self.tx_buffer.take().map(|buffer| {
+                buffer[0] = byte;
+                self.uart.transmit_buffer(buffer, 1);
+            });
+            ReturnCode::SUCCESS
+        }
+    }
+
+    fn write_bytes(&self, bytes: &[u8]) -> ReturnCode {
+        if self.tx_in_progress_helper.get() {
+            ReturnCode::EBUSY
+        } else {
+            self.tx_in_progress_helper.set(true);
+            self.tx_buffer.take().map(|buffer| {
+                let len = cmp::min(bytes.len(), buffer.len());
+                // Copy elements of `bytes` into `buffer`
+                (&mut buffer[..len]).copy_from_slice(&bytes[..len]);
+                self.uart.transmit_buffer(buffer, len);
+            });
+            ReturnCode::SUCCESS
+        }
+    }
+
+    fn read_command(&self) {
+        self.rx_buffer_helper.map(|buffer| {
+            let mut terminator = 0;
+            let len = buffer.len();
+            for i in 0..len {
+                if buffer[i] == 0 {
+                    terminator = i;
+                    break;
+                }
+            }
+            if terminator > 0 {
+                let cmd_str = str::from_utf8(&buffer[0..terminator]);
+                match cmd_str {
+                    Ok(s) => {
+                        let clean_str = s.trim();
+                        if clean_str.starts_with("OK") {
+                            self.rx_in_progress.take().map(|appid| {
+                                self.apps.enter(appid, |app, _| {
+                                    app.read_callback.map(|mut cb| {
+                                        cb.schedule(From::from(ReturnCode::SUCCESS), 0, 0);
+                                    })
+                                })
+                            });
+                        } else if clean_str.starts_with("ERROR") {
+                            self.rx_in_progress.take().map(|appid| {
+                                self.apps.enter(appid, |app, _| {
+                                    app.read_callback.map(|mut cb| {
+                                        cb.schedule(From::from(ReturnCode::FAIL), 0, 0);
+                                    })
+                                })
+                            });
+                        } else if clean_str.starts_with("ALREADY CONNECTED") {
+                            self.rx_in_progress.take().map(|appid| {
+                                self.apps.enter(appid, |app, _| {
+                                    app.read_callback.map(|mut cb| {
+                                        cb.schedule(From::from(ReturnCode::EALREADY), 0, 0);
+                                    })
+                                })
+                            });
+                        } else {
+                            let mut link_id_pos = clean_str.get(5..6);
+                            link_id_pos.take().map(|link_id| {
+                                let mut message_start = clean_str.find(":");
+                                message_start.take().map(|pos| {
+                                    let mut message = clean_str.get((pos+1)..);
+                                    message.take().map(|buffer| {
+                                        let id = link_id.as_bytes();
+                                        self.links[(id[0] - 48) as usize].app.map(|appid| {
+                                            self.apps.enter(*appid, |app, _| {
+                                                app.read_callback.map(|mut cb| {
+                                                    let rx_buffer = buffer.as_bytes();
+                                                    if let Some(mut app_buffer) = app.read_buffer.take() {
+                                                        for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
+                                                            *a = *b;
+                                                        }
+                                                        app.read_buffer.replace(app_buffer);
+                                                        cb.schedule(From::from(ReturnCode::SUCCESS), buffer.len(), 0);
+                                                    }
+                                                })
+                                            })
+                                        })
+                                    });
+                                });                                    
+                            });
+                        }
+                    }
+                    Err(_e) => debug!("Invalid command: {:?}", buffer),
+                }
+            }
+        });
     }
 }
 
@@ -233,18 +370,21 @@ impl Driver for EspSerial<'_> {
     ///        passed in `arg1`
     /// - `3`: Cancel any in progress receives and return (via callback)
     ///        what has been received so far.
-    fn command(&self, cmd_num: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
+    fn command(&self, cmd_num: usize, arg1: usize, arg2: usize, appid: AppId) -> ReturnCode {
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 => {
                 let len = arg1;
+                let link_id = arg2;
                 self.apps.enter(appid, |app, _| {
-                    self.send_bind(appid, app, len)
+                    app.write_len = len;
+                    self.send_bind(appid, app, len, link_id)
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* putstr */ => {
                 let len = arg1;
                 self.apps.enter(appid, |app, _| {
+                    app.write_len = len;
                     self.send_new(appid, app, len)
                 }).unwrap_or_else(|err| err.into())
             },
@@ -260,10 +400,25 @@ impl Driver for EspSerial<'_> {
             },
             5 => {
                 let len = arg1;
+                let link_id = arg2;
                 self.apps.enter(appid, |app, _| {
-                    self.close_connection(appid, app, len)
+                    self.close_connection(appid, app, len, link_id)
                 }).unwrap_or_else(|err| err.into())
             },
+            6 => {
+                let mut val = 0;
+                self.apps.enter(appid, |_app, _| {
+                    val = self.get_linkid(appid);
+                    ReturnCode::SUCCESS
+                }).unwrap_or_else(|err| err.into());
+                if val == 404 {
+                    ReturnCode::EBUSY
+                } else {
+                    ReturnCode::SuccessWithValue {
+                        value: val as usize 
+                    }  
+                }
+            }
             _ => ReturnCode::ENOSUPPORT
         }
     }
@@ -273,6 +428,7 @@ impl uart::TransmitClient for EspSerial<'_> {
     fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
         // Either print more from the AppSlice or send a callback to the
         // application.
+        self.tx_in_progress_helper.set(false);
         self.tx_buffer.replace(buffer);
         self.tx_in_progress.take().map(|appid| {
             self.apps.enter(appid, |app, _| {
@@ -283,7 +439,7 @@ impl uart::TransmitClient for EspSerial<'_> {
                             let written = app.write_len;
                             app.write_len = 0;
                             app.write_callback.map(|mut cb| {
-                                cb.schedule(written, 0, 0);
+                                cb.schedule(From::from(ReturnCode::SUCCESS), written, 0);
                             });
                         }
                     }
@@ -342,40 +498,82 @@ impl uart::ReceiveClient for EspSerial<'_> {
         rcode: ReturnCode,
         error: uart::Error,
     ) {
-        self.rx_in_progress
-            .take()
-            .map(|appid| {
-                self.apps
-                    .enter(appid, |app, _| {
-                        app.read_callback.map(|mut cb| {
-                            // An iterator over the returned buffer yielding only the first `rx_len`
-                            // bytes
-                            let rx_buffer = buffer.iter().take(rx_len);
-                            match error {
-                                uart::Error::None | uart::Error::Aborted => {
-                                    // Receive some bytes, signal error type and return bytes to process buffer
-                                    if let Some(mut app_buffer) = app.read_buffer.take() {
-                                        for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
-                                            *a = *b;
-                                        }
-                                        cb.schedule(From::from(rcode), rx_len, 0);
-                                    } else {
-                                        // Oops, no app buffer
-                                        cb.schedule(From::from(ReturnCode::EINVAL), 0, 0);
-                                    }
-                                }
-                                _ => {
-                                    // Some UART error occurred
-                                    cb.schedule(From::from(ReturnCode::FAIL), 0, 0);
-                                }
-                            }
-                        });
-                    })
-                    .unwrap_or_default();
-            })
-            .unwrap_or_default();
+        // debug!("received message");
+        // self.rx_in_progress
+        //     .take()
+        //     .map(|appid| {
+        //         self.apps
+        //             .enter(appid, |app, _| {
+        //                 app.read_callback.map(|mut cb| {
+        //                     // An iterator over the returned buffer yielding only the first `rx_len`
+        //                     // bytes
+        //                     let rx_buffer = buffer.iter().take(rx_len);
+        //                     match error {
+        //                         uart::Error::None | uart::Error::Aborted => {
+        //                             // Receive some bytes, signal error type and return bytes to process buffer
+        //                             if let Some(mut app_buffer) = app.read_buffer.take() {
+        //                                 for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
+        //                                     *a = *b;
+        //                                 }
+        //                                 cb.schedule(From::from(rcode), rx_len, 0);
+        //                             } else {
+        //                                 // Oops, no app buffer
+        //                                 cb.schedule(From::from(ReturnCode::EINVAL), 0, 0);
+        //                             }
+        //                         }
+        //                         _ => {
+        //                             // Some UART error occurred
+        //                             cb.schedule(From::from(ReturnCode::FAIL), 0, 0);
+        //                         }
+        //                     }
+        //                 });
+        //             })
+        //             .unwrap_or_default();
+        //     })
+        //     .unwrap_or_default();
+        if error == uart::Error::None {
+            match rx_len {
+                0 => debug!("ProcessConsole had read of 0 bytes"),
+                1 => {
+                    self.rx_buffer_helper.map(|command| {
+                        let index = self.helper_pos.get() as usize;
+                        if buffer[0] == ('\n' as u8) || buffer[0] == ('\r' as u8) {
+                            self.write_bytes(&['\r' as u8, '\n' as u8]);
+                            self.new_line.set(true);
+                            self.write_bytes(command);
+                        } else if buffer[0] == ('\x08' as u8) && index > 0 {
+                            // Backspace, echo and remove last byte
+                            // Note echo is '\b \b' to erase
+                            self.write_bytes(&['\x08' as u8, ' ' as u8, '\x08' as u8]);
+                            command[index - 1] = '\0' as u8;
+                            self.helper_pos.set(index - 1);
+                        } else if index < (command.len() - 1) && buffer[0] < 128 {
+                            // For some reason, sometimes reads return > 127 but no error,
+                            // which causes utf-8 decoding failure, so check byte is < 128. -pal
 
-        // Whatever happens, we want to make sure to replace the rx_buffer for future transactions
-        self.rx_buffer.replace(buffer);
+                            // Echo the byte and store it
+                            self.write(buffer[0]);
+                            command[index] = buffer[0];
+                            self.helper_pos.set(index + 1);
+                            command[index + 1] = 0;
+                        }
+                    });
+                }
+                _ => debug!(
+                    "ProcessConsole issues reads of 1 byte, but receive_complete was length {}",
+                    rx_len
+                ),
+            };
+        }
+        if self.new_line.get() == true {
+            self.read_command();
+            self.rx_buffer_helper.map(|buffer| {
+                buffer[0] = 0;
+            });
+            self.helper_pos.set(0);
+            self.new_line.set(false);
+        }
+
+        self.uart.receive_buffer(buffer, 1);
     }
 }
