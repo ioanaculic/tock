@@ -45,6 +45,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 /// capsules for this platform.
 struct STM32F412GDiscovery {
     console: &'static capsules::console::Console<'static>,
+    // console_esp: &'static capsules::esp_serial::EspSerial<'static>,
     ipc: kernel::ipc::IPC,
     led: &'static capsules::led::LED<'static, stm32f412g::gpio::Pin<'static>>,
     button: &'static capsules::button::Button<'static, stm32f412g::gpio::Pin<'static>>,
@@ -68,6 +69,7 @@ impl Platform for STM32F412GDiscovery {
     {
         match driver_num {
             capsules::console::DRIVER_NUM => f(Some(self.console)),
+            // capsules::esp_serial::DRIVER_NUM => f(Some(self.console_esp)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
@@ -398,6 +400,10 @@ pub unsafe fn reset_handler() {
 
     // Setup the console.
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
+    
+    // uncomment the lines that contains esp_console to use esp_console
+    // let console_esp = components::esp_serial_component::ESPSerialComponent::new(board_kernel, uart_mux)
+    //     .finalize(());
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
 
@@ -637,6 +643,7 @@ pub unsafe fn reset_handler() {
 
     let stm32f412g = STM32F412GDiscovery {
         console: console,
+        // console_esp: console_esp,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
         led: led,
         button: button,
