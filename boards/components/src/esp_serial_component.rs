@@ -22,11 +22,9 @@ use capsules::esp_serial;
 use capsules::esp_serial::Link;
 use capsules::virtual_uart::{MuxUart, UartDevice};
 use kernel::capabilities;
-use kernel::common::dynamic_deferred_call::DynamicDeferredCall;
 use kernel::component::Component;
 use kernel::create_capability;
 use kernel::hil;
-use kernel::hil::uart;
 use kernel::static_init;
 
 // pub struct UartMuxComponent {

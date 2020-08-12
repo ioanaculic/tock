@@ -27,14 +27,14 @@ pub static mut READ_BUF: [u8; 128] = [0; 128];
 pub static mut HELPER_BUF: [u8; 128] = [0; 128];
 
 pub struct Link {
-    linkId: usize,
+    _link_id: usize,
     app: OptionalCell<AppId>,
 }
 
 impl Link {
     pub fn new(id: usize) -> Link {
         Link {
-            linkId: id,
+            _link_id: id,
             app: OptionalCell::empty(),
         }
     }
@@ -49,7 +49,6 @@ pub struct EspSerial<'a> {
     rx_buffer: TakeCell<'static, [u8]>,
     rx_buffer_helper: TakeCell<'static, [u8]>,
     helper_pos: Cell<usize>,
-    connected: OptionalCell<bool>,
     tx_in_progress_helper: Cell<bool>,
     new_line: Cell<bool>,
     links: [&'a Link; 5],
@@ -73,7 +72,6 @@ impl<'a> EspSerial<'a> {
             rx_buffer: TakeCell::new(rx_buffer),
             rx_buffer_helper: TakeCell::new(rx_buffer_helper),
             helper_pos: Cell::new(0),
-            connected: OptionalCell::empty(),
             tx_in_progress_helper: Cell::new(false),
             new_line: Cell::new(false),
             links: links,
@@ -95,6 +93,7 @@ impl<'a> EspSerial<'a> {
         }
         return_val as usize
     }
+
     fn send_bind(&self, app_id: AppId, app: &mut App, len: usize, link_id: usize) -> ReturnCode {
         self.links[link_id].app.set(app_id);
         self.send_new(app_id, app, len)
@@ -114,7 +113,9 @@ impl<'a> EspSerial<'a> {
                 self.send(app_id, app, slice);
                 ReturnCode::SUCCESS
             }
-            None => ReturnCode::EBUSY,
+            None => {
+                ReturnCode::EBUSY
+            },
         }
     }
 
@@ -198,33 +199,35 @@ impl<'a> EspSerial<'a> {
         }
     }
 
-    fn write(&self, byte: u8) -> ReturnCode {
-        if self.tx_in_progress_helper.get() {
-            ReturnCode::EBUSY
-        } else {
-            self.tx_in_progress_helper.set(true);
-            self.tx_buffer.take().map(|buffer| {
-                buffer[0] = byte;
-                self.uart.transmit_buffer(buffer, 1);
-            });
-            ReturnCode::SUCCESS
-        }
-    }
+    // use to see what you write on the console
 
-    fn write_bytes(&self, bytes: &[u8]) -> ReturnCode {
-        if self.tx_in_progress_helper.get() {
-            ReturnCode::EBUSY
-        } else {
-            self.tx_in_progress_helper.set(true);
-            self.tx_buffer.take().map(|buffer| {
-                let len = cmp::min(bytes.len(), buffer.len());
-                // Copy elements of `bytes` into `buffer`
-                (&mut buffer[..len]).copy_from_slice(&bytes[..len]);
-                self.uart.transmit_buffer(buffer, len);
-            });
-            ReturnCode::SUCCESS
-        }
-    }
+    // fn write(&self, byte: u8) -> ReturnCode {
+    //     if self.tx_in_progress_helper.get() {
+    //         ReturnCode::EBUSY
+    //     } else {
+    //         // self.tx_in_progress_helper.set(true);
+    //         // self.tx_buffer.take().map(|buffer| {
+    //         //     buffer[0] = byte;
+    //         //     self.uart.transmit_buffer(buffer, 1);
+    //         // });
+    //         ReturnCode::SUCCESS
+    //     }
+    // }
+
+    // fn write_bytes(&self, bytes: &[u8]) -> ReturnCode {
+    //     if self.tx_in_progress_helper.get() {
+    //         ReturnCode::EBUSY
+    //     } else {
+    //         // self.tx_in_progress_helper.set(true);
+    //         // self.tx_buffer.take().map(|buffer| {
+    //         //     let len = cmp::min(bytes.len(), buffer.len());
+    //             // Copy elements of `bytes` into `buffer`
+    //             // (&mut buffer[..len]).copy_from_slice(&bytes[..len]);
+    //             // self.uart.transmit_buffer(buffer, len);
+    //         // });
+    //         ReturnCode::SUCCESS
+    //     }
+    // }
 
     fn read_command(&self) {
         self.rx_buffer_helper.map(|buffer| {
@@ -265,7 +268,7 @@ impl<'a> EspSerial<'a> {
                                     })
                                 })
                             });
-                        } else {
+                        } else if clean_str.starts_with("+IPD"){
                             let mut link_id_pos = clean_str.get(5..6);
                             link_id_pos.take().map(|link_id| {
                                 let mut message_start = clean_str.find(":");
@@ -289,6 +292,25 @@ impl<'a> EspSerial<'a> {
                                         })
                                     });
                                 });                                    
+                            });
+                        } 
+                        else if clean_str.starts_with("+CIFSR:STAIP") {
+                            let mut ip = clean_str.get(14..(clean_str.len()-1));
+                            ip.take().map(|buffer| {
+                                self.rx_in_progress.take().map(|appid| {
+                                    self.apps.enter(appid, |app, _| {
+                                        app.read_callback.map(|mut cb| {
+                                            let rx_buffer = buffer.as_bytes();
+                                            if let Some(mut app_buffer) = app.read_buffer.take() {
+                                                for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
+                                                    *a = *b;
+                                                }
+                                                app.read_buffer.replace(app_buffer);
+                                                cb.schedule(From::from(ReturnCode::SUCCESS), buffer.len(), 0);
+                                            }
+                                        })
+                                    })
+                                });
                             });
                         }
                     }
@@ -439,6 +461,7 @@ impl uart::TransmitClient for EspSerial<'_> {
                             let written = app.write_len;
                             app.write_len = 0;
                             app.write_callback.map(|mut cb| {
+                                // debug!("callback write");
                                 cb.schedule(From::from(ReturnCode::SUCCESS), written, 0);
                             });
                         }
@@ -495,56 +518,24 @@ impl uart::ReceiveClient for EspSerial<'_> {
         &self,
         buffer: &'static mut [u8],
         rx_len: usize,
-        rcode: ReturnCode,
+        _rcode: ReturnCode,
         error: uart::Error,
     ) {
-        // debug!("received message");
-        // self.rx_in_progress
-        //     .take()
-        //     .map(|appid| {
-        //         self.apps
-        //             .enter(appid, |app, _| {
-        //                 app.read_callback.map(|mut cb| {
-        //                     // An iterator over the returned buffer yielding only the first `rx_len`
-        //                     // bytes
-        //                     let rx_buffer = buffer.iter().take(rx_len);
-        //                     match error {
-        //                         uart::Error::None | uart::Error::Aborted => {
-        //                             // Receive some bytes, signal error type and return bytes to process buffer
-        //                             if let Some(mut app_buffer) = app.read_buffer.take() {
-        //                                 for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
-        //                                     *a = *b;
-        //                                 }
-        //                                 cb.schedule(From::from(rcode), rx_len, 0);
-        //                             } else {
-        //                                 // Oops, no app buffer
-        //                                 cb.schedule(From::from(ReturnCode::EINVAL), 0, 0);
-        //                             }
-        //                         }
-        //                         _ => {
-        //                             // Some UART error occurred
-        //                             cb.schedule(From::from(ReturnCode::FAIL), 0, 0);
-        //                         }
-        //                     }
-        //                 });
-        //             })
-        //             .unwrap_or_default();
-        //     })
-        //     .unwrap_or_default();
         if error == uart::Error::None {
             match rx_len {
                 0 => debug!("ProcessConsole had read of 0 bytes"),
                 1 => {
+                    // uncomment write function calls to see what you write on the console
                     self.rx_buffer_helper.map(|command| {
                         let index = self.helper_pos.get() as usize;
                         if buffer[0] == ('\n' as u8) || buffer[0] == ('\r' as u8) {
-                            self.write_bytes(&['\r' as u8, '\n' as u8]);
+                            // self.write_bytes(&['\r' as u8, '\n' as u8]);
                             self.new_line.set(true);
-                            self.write_bytes(command);
+                            // self.write_bytes(command);
                         } else if buffer[0] == ('\x08' as u8) && index > 0 {
                             // Backspace, echo and remove last byte
                             // Note echo is '\b \b' to erase
-                            self.write_bytes(&['\x08' as u8, ' ' as u8, '\x08' as u8]);
+                            // self.write_bytes(&['\x08' as u8, ' ' as u8, '\x08' as u8]);
                             command[index - 1] = '\0' as u8;
                             self.helper_pos.set(index - 1);
                         } else if index < (command.len() - 1) && buffer[0] < 128 {
@@ -552,7 +543,7 @@ impl uart::ReceiveClient for EspSerial<'_> {
                             // which causes utf-8 decoding failure, so check byte is < 128. -pal
 
                             // Echo the byte and store it
-                            self.write(buffer[0]);
+                            // self.write(buffer[0]);
                             command[index] = buffer[0];
                             self.helper_pos.set(index + 1);
                             command[index + 1] = 0;
