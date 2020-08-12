@@ -341,14 +341,14 @@ pub unsafe fn reset_handler() {
     let process_management_capability =
         create_capability!(capabilities::ProcessManagementCapability);
 
-    // Setup the console.
-    let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
+    // // Setup the console for esp_serial.
+    // let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
 
-    let console_esp =
-        components::esp_serial_component::ESPSerialComponent::new(board_kernel, uart_mux)
-            .finalize(());
-    // Create the debugger object that handles calls to `debug!()`.
-    components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
+    // let console_esp =
+    //     components::esp_serial_component::ESPSerialComponent::new(board_kernel, uart_mux)
+    //         .finalize(());
+    // // Create the debugger object that handles calls to `debug!()`.
+    // components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
 
     // // Setup the console.
     // let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
