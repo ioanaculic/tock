@@ -35,4 +35,5 @@ pub mod si7021;
 pub mod spi;
 pub mod st7735;
 pub mod temperature;
+pub mod text_screen;
 pub mod touch;

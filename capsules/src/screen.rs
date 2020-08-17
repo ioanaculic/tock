@@ -305,7 +305,11 @@ impl<'a> Screen<'a> {
                 .apps
                 .enter(appid, |app, _| {
                     let len = if let Some(ref shared) = app.shared {
-                        shared.len()
+                        if shared.len() < data1 {
+                            shared.len()
+                        } else {
+                            data1
+                        }
                     } else {
                         0
                     };
@@ -363,7 +367,12 @@ impl<'a> Screen<'a> {
                 if app.pending_command {
                     app.pending_command = false;
                     self.current_app.set(app.appid());
-                    let r = self.call_screen(app.command, app.data1, app.data2, app.appid());
+                    let r = self.call_screen(
+                        app.command,
+                        app.data1,
+                        app.data2,
+                        app.appid(),
+                    );
                     if r != ReturnCode::SUCCESS {
                         self.current_app.clear();
                     }
@@ -524,14 +533,34 @@ impl<'a> Driver for Screen<'a> {
             5 => self.enqueue_command(ScreenCommand::InvertOff, 0, 0, appid),
 
             // Get Resolution Modes Number
-            11 => self.enqueue_command(ScreenCommand::GetSupportedResolutionModes, 0, 0, appid),
+            11 => self.enqueue_command(
+                ScreenCommand::GetSupportedResolutionModes,
+                0,
+                0,
+                appid,
+            ),
             // Get Resolution Mode Width and Height
-            12 => self.enqueue_command(ScreenCommand::GetSupportedResolution, data1, 0, appid),
+            12 => self.enqueue_command(
+                ScreenCommand::GetSupportedResolution,
+                data1,
+                0,
+                appid,
+            ),
 
             // Get Color Depth Modes Number
-            13 => self.enqueue_command(ScreenCommand::GetSupportedPixelFormats, 0, 0, appid),
+            13 => self.enqueue_command(
+                ScreenCommand::GetSupportedPixelFormats,
+                0,
+                0,
+                appid,
+            ),
             // Get Color Depth Mode Bits per Pixel
-            14 => self.enqueue_command(ScreenCommand::GetSupportedPixelFormat, data1, 0, appid),
+            14 => self.enqueue_command(
+                ScreenCommand::GetSupportedPixelFormat,
+                data1,
+                0,
+                appid,
+            ),
 
             // Get Rotation
             21 => self.enqueue_command(ScreenCommand::GetRotation, 0, 0, appid),
@@ -541,7 +570,12 @@ impl<'a> Driver for Screen<'a> {
             // Get Resolution
             23 => self.enqueue_command(ScreenCommand::GetResolution, 0, 0, appid),
             // Set Resolution
-            24 => self.enqueue_command(ScreenCommand::SetResolution, data1, data2, appid),
+            24 => self.enqueue_command(
+                ScreenCommand::SetResolution,
+                data1,
+                data2,
+                appid,
+            ),
 
             // Get Color Depth
             25 => self.enqueue_command(ScreenCommand::GetPixelFormat, 0, 0, appid),
@@ -549,12 +583,16 @@ impl<'a> Driver for Screen<'a> {
             26 => self.enqueue_command(ScreenCommand::SetPixelFormat, data1, 0, appid),
 
             // Set Write Frame
-            100 => self.enqueue_command(ScreenCommand::SetWriteFrame, data1, data2, appid),
+            100 => self.enqueue_command(
+                ScreenCommand::SetWriteFrame,
+                data1,
+                data2,
+                appid,
+            ),
             // Write
             200 => self.enqueue_command(ScreenCommand::Write, data1, data2, appid),
             // Fill
             300 => self.enqueue_command(ScreenCommand::Fill, data1, data2, appid),
-
             _ => ReturnCode::ENOSUPPORT,
         }
     }
