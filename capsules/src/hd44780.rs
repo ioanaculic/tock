@@ -52,9 +52,7 @@
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::gpio;
-use kernel::hil::text_screen::{
-    TextScreen, TextScreenClient
-};
+use kernel::hil::text_screen::{TextScreen, TextScreenClient};
 use kernel::hil::time::{self, Alarm, Frequency};
 use kernel::ReturnCode;
 
@@ -218,14 +216,12 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
         self.set_delay(10, LCDStatus::Begin0);
     }
 
-
     pub fn screen_command(&self, command: usize, op: usize, value: u8) -> ReturnCode {
         if self.lcd_status.get() == LCDStatus::Idle {
             match command {
                 1 => {
                     if op == 0 {
-                        self.display_control
-                            .set(self.display_control.get() | value);
+                        self.display_control.set(self.display_control.get() | value);
                     } else {
                         self.display_control
                             .set(self.display_control.get() & !value);
@@ -241,8 +237,7 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
                     ReturnCode::SUCCESS
                 }
 
-                _ => ReturnCode::EINVAL
-
+                _ => ReturnCode::EINVAL,
             }
         } else {
             ReturnCode::EBUSY
@@ -589,10 +584,9 @@ impl<'a, A: Alarm<'a>> time::AlarmClient for HD44780<'a, A> {
     }
 }
 
-
 impl<'a, A: Alarm<'a>> TextScreen for HD44780<'a, A> {
     fn get_size(&self) -> (usize, usize) {
-        (16, 2) 
+        (16, 2)
     }
 
     fn print(&self, buffer: &'static mut [u8], len: usize) -> ReturnCode {
@@ -660,5 +654,4 @@ impl<'a, A: Alarm<'a>> TextScreen for HD44780<'a, A> {
             self.text_screen_client.clear();
         }
     }
-
 }

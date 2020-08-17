@@ -7,14 +7,14 @@ pub trait TextScreen {
     /// Returns a tupel (width, height) with the resolution of the
     /// screen that is being used. This function is synchronous as the
     /// resolution is known by the driver at any moment.
-    /// 
+    ///
     /// The resolution is constant.
     fn get_size(&self) -> (usize, usize);
 
     /// Sends a write command to the driver, and the buffer to write from
-    /// and the len are sent as arguments. When the `write` operation is 
+    /// and the len are sent as arguments. When the `write` operation is
     /// finished, the driver will call the `write_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The write command is valid and will be sent to the driver.
     /// - `EBUSY`: The driver is busy with another command.
@@ -23,7 +23,7 @@ pub trait TextScreen {
     /// Sends to the driver a command to set the cursor at a given position
     /// (x_position, y_position). When finished, the driver will call the
     /// `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.
@@ -31,7 +31,7 @@ pub trait TextScreen {
 
     /// Sends to the driver a command to hide the cursor. When finised,
     /// the driver will call the `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.
@@ -39,7 +39,7 @@ pub trait TextScreen {
 
     /// Sends to the driver a command to show the cursor. When finised,
     /// the driver will call the `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.
@@ -47,7 +47,7 @@ pub trait TextScreen {
 
     /// Sends to the driver a command to turn on the blinking cursor. When finised,
     /// the driver will call the `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.
@@ -55,31 +55,31 @@ pub trait TextScreen {
 
     /// Sends to the driver a command to turn off the blinking cursor. When finised,
     /// the driver will call the `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.
     fn blink_cursor_off(&self) -> ReturnCode;
 
-    /// Sends to the driver a command to turn on the display of the screen. 
+    /// Sends to the driver a command to turn on the display of the screen.
     /// When finised, the driver will call the `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.
     fn display_on(&self) -> ReturnCode;
 
-    /// Sends to the driver a command to turn off the display of the screen. 
+    /// Sends to the driver a command to turn off the display of the screen.
     /// When finised, the driver will call the `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.
     fn display_off(&self) -> ReturnCode;
 
-    /// Sends to the driver a command to cleat the display of the screen. 
+    /// Sends to the driver a command to cleat the display of the screen.
     /// When finised, the driver will call the `command_complete()` callback.
-    /// 
+    ///
     /// Return values:
     /// - `SUCCESS`: The command is valid and will be sent to the driver.
     /// - `EBUSY`: Another command is in progress.

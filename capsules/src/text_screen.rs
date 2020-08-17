@@ -1,11 +1,11 @@
 //! Provides userspace with access to the text screen.
-//! 
+//!
 //! Usage:
 //! -----
-//! 
-//! You need a screen that provides the `hil::text_screen::TextScreen` 
+//!
+//! You need a screen that provides the `hil::text_screen::TextScreen`
 //! trait.
-//! 
+//!
 //! ```rust
 //! let text_screen = components::text_screen::TextScreenComponent::new(board_kernel, lcd)
 //!         .finalize(components::screen_buffer_size!(64));
@@ -52,7 +52,7 @@ pub struct App {
 impl Default for App {
     fn default() -> App {
         App {
-            callback: None, 
+            callback: None,
             pending_command: false,
             shared: None,
             write_position: 0,
@@ -83,7 +83,7 @@ impl<'a> TextScreen<'a> {
             apps: grant,
             screen_ready: Cell::new(false),
             current_app: OptionalCell::empty(),
-            buffer: TakeCell::new(buffer)
+            buffer: TakeCell::new(buffer),
         }
     }
 
@@ -103,7 +103,7 @@ impl<'a> TextScreen<'a> {
                     if r != ReturnCode::SUCCESS {
                         self.current_app.clear();
                     }
-                    r 
+                    r
                 } else {
                     if app.pending_command == true {
                         ReturnCode::EBUSY
@@ -163,16 +163,11 @@ impl<'a> TextScreen<'a> {
             TextScreenCommand::Clear => self.text_screen.clear(),
             TextScreenCommand::Home => self.text_screen.clear(),
             TextScreenCommand::ShowCursor => self.text_screen.show_cursor(),
-            _ => ReturnCode::ENOSUPPORT
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
-    fn run_next_command(
-        &self,
-        data1: usize,
-        data2: usize,
-        data3: usize
-    ) {
+    fn run_next_command(&self, data1: usize, data2: usize, data3: usize) {
         if !self.screen_ready.get() {
             self.screen_ready.set(true);
         } else {
@@ -217,7 +212,7 @@ impl<'a> Driver for TextScreen<'a> {
     ) -> ReturnCode {
         match subscribe_num {
             0 => self
-                .apps 
+                .apps
                 .enter(app_id, |app, _| {
                     app.callback = callback;
                     ReturnCode::SUCCESS
@@ -227,13 +222,7 @@ impl<'a> Driver for TextScreen<'a> {
         }
     }
 
-    fn command(
-        &self,
-        command_num: usize,
-        data1: usize,
-        data2: usize,
-        appid: AppId
-    ) -> ReturnCode {
+    fn command(&self, command_num: usize, data1: usize, data2: usize, appid: AppId) -> ReturnCode {
         match command_num {
             // This driver exists.
             0 => ReturnCode::SUCCESS,
@@ -260,8 +249,7 @@ impl<'a> Driver for TextScreen<'a> {
             //Set Curosr
             11 => self.enqueue_command(TextScreenCommand::SetCursor, data1, data2, appid),
             // NOSUPPORT
-            _ => ReturnCode::ENOSUPPORT
-
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
@@ -275,11 +263,7 @@ impl<'a> Driver for TextScreen<'a> {
             0 => self
                 .apps
                 .enter(appid, |app, _| {
-                    let _ = if let Some(ref s) = slice { 
-                        s.len() 
-                    } else { 
-                        0 
-                    };
+                    let _ = if let Some(ref s) = slice { s.len() } else { 0 };
                     app.shared = slice;
                     app.write_position = 0;
                     ReturnCode::SUCCESS
