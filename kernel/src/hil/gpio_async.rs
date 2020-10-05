@@ -49,6 +49,10 @@ pub trait Port {
     fn disable_interrupt(&self, pin: usize) -> ReturnCode;
 
     fn is_pending(&self, pin: usize) -> bool;
+
+    fn set_pins_values(&self, _bank: u8, _values_bits: u8) -> ReturnCode {
+        ReturnCode::ENOSUPPORT
+    }
 }
 
 /// The gpio_async Client interface is used to both receive callbacks

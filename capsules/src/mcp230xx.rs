@@ -66,6 +66,7 @@
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil;
+use kernel::debug;
 use kernel::hil::gpio;
 use kernel::hil::gpio_async;
 use kernel::ReturnCode;
@@ -110,6 +111,9 @@ enum State {
     EnableInterruptSettings(u8),
     ReadInterruptSetup(u8),
     ReadInterruptValues(u8),
+    SelectGpioBank(u8, u8),
+    ReadGpioBank(u8, u8),
+
 
     /// Disable I2C and release buffer
     Done,
@@ -234,6 +238,19 @@ impl<'a> MCP230xx<'a> {
             self.i2c.write(buffer, 1);
             self.state
                 .set(State::SelectIoDirForGpPu(pin_number, enabled));
+
+            ReturnCode::SUCCESS
+        })
+    }
+
+    fn set_pins_bank(&self, bank: u8, values_bits: u8) -> ReturnCode {
+        self.buffer.take().map_or(ReturnCode::EBUSY, |buffer| {
+            self.i2c.enable();
+
+            buffer[0] = self.calc_register_addr(Registers::Gpio, 0);
+            self.i2c.write(buffer, 1);
+            self.state
+                .set(State::SelectGpioBank(bank, values_bits));
 
             ReturnCode::SUCCESS
         })
@@ -418,6 +435,16 @@ impl hil::i2c::I2CClient for MCP230xx<'_> {
                 };
                 buffer[0] = self.calc_register_addr(Registers::GpPu, pin_number);
                 buffer[1] = pullup;
+                self.i2c.write(buffer, 2);
+                self.state.set(State::Done);
+            }
+            State::SelectGpioBank(bank, values_bits) => {
+                self.i2c.read(buffer, 1);
+                self.state.set(State::ReadGpioBank(bank, values_bits));
+            }
+            State::ReadGpioBank(bank, values_bits) => {
+                buffer[1] = buffer[0] | values_bits;
+                buffer[0] = self.calc_register_addr(Registers::Gpio, 0);
                 self.i2c.write(buffer, 2);
                 self.state.set(State::Done);
             }
@@ -620,5 +647,9 @@ impl gpio_async::Port for MCP230xx<'_> {
 
     fn is_pending(&self, _pin: usize) -> bool {
         false
+    }
+
+    fn set_pins_values(&self, bank: u8, values_bits: u8) -> ReturnCode {
+       self.set_pins_bank(bank, values_bits)
     }
 }

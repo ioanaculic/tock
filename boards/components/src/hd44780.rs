@@ -21,58 +21,73 @@
 //!     )
 //! );
 //! ```
-use capsules::hd44780::HD44780;
+use capsules::hd44780::{HD44780, HD44780Gpio};
+use capsules::mcp230xx::MCP230xx;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use core::mem::MaybeUninit;
 use kernel::component::Component;
 use kernel::hil::time;
 use kernel::hil::time::Alarm;
 use kernel::static_init_half;
+use core::marker::PhantomData;
 
 // Setup static space for the objects.
 #[macro_export]
-macro_rules! hd44780_component_helper {
-    ($A:ty, $rs:expr, $en: expr, $data_4_pin: expr, $data_5_pin: expr, $data_6_pin: expr, $data_7_pin: expr) => {{
-        use capsules::hd44780::HD44780;
+macro_rules! hd44780_gpio_component_helper {
+    ($rs:expr, $en: expr, $data1: expr, $data2: expr, $data3: expr, $data4: expr, $A:ty) => {{
+        use capsules::hd44780::{HD44780, HD44780DirectGpio};
+        use kernel::static_init_half;
         use core::mem::MaybeUninit;
         static mut BUF1: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut BUF2: MaybeUninit<HD44780<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
+        static mut gpio_buffer: MaybeUninit<HD44780DirectGpio<'static>> = MaybeUninit::uninit();
+        let gpio = static_init_half!(&mut gpio_buffer, HD44780DirectGpio<'static>, HD44780DirectGpio::new($rs, $en, $data1, $data2, $data3, $data4));
         (
             &mut BUF1,
             &mut BUF2,
-            $rs,
-            $en,
-            $data_4_pin,
-            $data_5_pin,
-            $data_6_pin,
-            $data_7_pin,
+            gpio,
         )
     };};
 }
 
-pub struct HD44780Component<A: 'static + time::Alarm<'static>> {
-    alarm_mux: &'static MuxAlarm<'static, A>,
+#[macro_export]
+macro_rules! hd44780_i2c_component_helper {
+    ($A:ty, $M:item) => {{
+        use capsules::hd44780::{HD44780, HD44780DirectGpio};
+        use kernel::static_init_half;
+        use core::mem::MaybeUninit;
+        static mut BUF1: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
+        static mut BUF2: MaybeUninit<HD44780<'static, VirtualMuxAlarm<'static, $A>>> =
+            MaybeUninit::uninit();
+        static mut i2c_buffer: MaybeUninit<MCP230xx<'static>> = MaybeUninit::uninit();
+        (
+            &mut BUF1,
+            &mut BUF2,
+            &mut i2c_buffer,
+        )
+    };};
 }
 
-impl<A: 'static + time::Alarm<'static>> HD44780Component<A> {
-    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> HD44780Component<A> {
+pub struct HD44780Component<G: 'static + HD44780Gpio, A: 'static + time::Alarm<'static>> {
+    alarm_mux: &'static MuxAlarm<'static, A>,
+    _gpio: PhantomData<G>
+}
+
+impl<G: 'static + HD44780Gpio, A: 'static + time::Alarm<'static>> HD44780Component<G, A> {
+    pub fn new(alarm_mux: &'static MuxAlarm<'static, A>) -> HD44780Component<G, A> {
         HD44780Component {
             alarm_mux: alarm_mux,
+            _gpio: PhantomData,
         }
     }
 }
 
-impl<A: 'static + time::Alarm<'static>> Component for HD44780Component<A> {
+impl<G: 'static + HD44780Gpio, A: 'static + time::Alarm<'static>> Component for HD44780Component<G, A> {
     type StaticInput = (
         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
         &'static mut MaybeUninit<HD44780<'static, VirtualMuxAlarm<'static, A>>>,
-        &'static dyn kernel::hil::gpio::Pin,
-        &'static dyn kernel::hil::gpio::Pin,
-        &'static dyn kernel::hil::gpio::Pin,
-        &'static dyn kernel::hil::gpio::Pin,
-        &'static dyn kernel::hil::gpio::Pin,
-        &'static dyn kernel::hil::gpio::Pin,
+        &'static G
     );
     type Output = &'static HD44780<'static, VirtualMuxAlarm<'static, A>>;
 
@@ -88,11 +103,6 @@ impl<A: 'static + time::Alarm<'static>> Component for HD44780Component<A> {
             capsules::hd44780::HD44780<'static, VirtualMuxAlarm<'static, A>>,
             capsules::hd44780::HD44780::new(
                 static_buffer.2,
-                static_buffer.3,
-                static_buffer.4,
-                static_buffer.5,
-                static_buffer.6,
-                static_buffer.7,
                 &mut capsules::hd44780::ROW_OFFSETS,
                 lcd_alarm,
             )
@@ -101,4 +111,31 @@ impl<A: 'static + time::Alarm<'static>> Component for HD44780Component<A> {
 
         hd44780
     }
+}
+
+pub struct HD44780ComponentI2C<A: 'static + time::Alarm<'static>> {
+    alarm_mux: &'static MuxAlarm<'static, A>,
+    mcp_230xx: &'static MCP230xx<'static>,
+}
+
+impl<A: 'static + time::Alarm<'static>> HD44780ComponentI2C<A: 'static + time::Alarm<'static>> {
+    pub fn new(
+        alarm_mux: &'static MuxAlarm<'static, A>,
+        mcp_230xx: &'static MCP230xx<'static>,
+    ) -> HD44780ComponentI2C {
+        HD44780ComponentI2C {
+            alarm_mux: alarm_mux,
+            mcp_230xx: mcp_230xx,
+        }
+    }
+}
+
+impl<A: 'static + time::Alarm<'static>> Component for HD44780ComponentI2C<A: 'static + time::Alarm<'static>> {
+    type StaticInput = (
+        &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
+        &'static mut MaybeUninit<HD44780<'static, VirtualMuxAlarm<'static, A>>>,
+    );
+    type Output = ();
+    
+    unsafe fn finalize
 }

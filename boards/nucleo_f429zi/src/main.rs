@@ -49,6 +49,7 @@ struct NucleoF429ZI {
         VirtualMuxAlarm<'static, stm32f429zi::tim2::Tim2<'static>>,
     >,
     gpio: &'static capsules::gpio::GPIO<'static, stm32f429zi::gpio::Pin<'static>>,
+    text_screen: &'static capsules::text_screen::TextScreen<'static>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -64,6 +65,7 @@ impl Platform for NucleoF429ZI {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
+            capsules::text_screen::DRIVER_NUM => f(Some(self.text_screen)),
             _ => f(None),
         }
     }
@@ -289,6 +291,44 @@ pub unsafe fn reset_handler() {
     let alarm = components::alarm::AlarmDriverComponent::new(board_kernel, mux_alarm)
         .finalize(components::alarm_component_helper!(stm32f429zi::tim2::Tim2));
 
+    // I2C screen
+    let mux_i2c = components::i2c::I2CMuxComponent::new(&stm32f429zi::i2c::I2C1, None, dynamic_deferred_caller)
+        .finalize(components::i2c_mux_component_helper!());
+    // 
+
+    let mcp230xx = components::mcp230xx::MCP230XXComponent::new(mux_i2c).finalize(
+        components::mcp230xx_component_helper!(),
+    );
+
+    let lcd_i2c = components::hd44780::HD44780ComponentI2C::new(mux_alarm, mcp230xx).finalize(
+        components::hd44780_i2c_component_helper!(
+            stm32f429zi::tim2::Tim2,
+        ),  
+    );
+
+    let lcd = components::hd44780::HD44780Component::new(mux_alarm).finalize(
+        components::hd44780_gpio_component_helper!(
+            // rs pin
+            stm32f429zi::gpio::PinId::PF13.get_pin().as_ref().unwrap(),
+            // en pin
+            stm32f429zi::gpio::PinId::PE11.get_pin().as_ref().unwrap(),
+            // data 4 pin
+            stm32f429zi::gpio::PinId::PF14.get_pin().as_ref().unwrap(),
+            // data 5 pin
+            stm32f429zi::gpio::PinId::PE13.get_pin().as_ref().unwrap(),
+            // data 6 pin
+            stm32f429zi::gpio::PinId::PF15.get_pin().as_ref().unwrap(),
+            // data 7 pin
+            stm32f429zi::gpio::PinId::PG14.get_pin().as_ref().unwrap(),
+            stm32f429zi::tim2::Tim2
+        ),
+    );
+
+    let text_screen = components::text_screen::TextScreenComponent::new(board_kernel, lcd)
+        .finalize(components::screen_buffer_size!(64));
+
+    lcd.init(16, 2);
+
     // GPIO
     let gpio = GpioComponent::new(
         board_kernel,
@@ -397,6 +437,7 @@ pub unsafe fn reset_handler() {
         button: button,
         alarm: alarm,
         gpio: gpio,
+        text_screen: text_screen,
     };
 
     // // Optional kernel tests

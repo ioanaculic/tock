@@ -50,8 +50,10 @@
 //! Author: Teona Severin <teona.severin9@gmail.com>
 
 use core::cell::Cell;
+use crate::mcp230xx;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::gpio;
+use kernel::debug;
 use kernel::hil::text_screen::{TextScreen, TextScreenClient};
 use kernel::hil::time::{self, Alarm, Frequency};
 use kernel::ReturnCode;
@@ -109,13 +111,21 @@ enum LCDStatus {
     Clear,
 }
 
+pub enum HD44780Pin {
+    RS,
+    EN,
+    DATA
+}
+
+pub trait HD44780Gpio {
+    fn set(&self, pin: HD44780Pin, value: u8);
+
+    fn get(&self, pin: HD44780Pin) -> u8;
+}
+
+
 pub struct HD44780<'a, A: Alarm<'a>> {
-    rs_pin: &'a dyn gpio::Pin,
-    en_pin: &'a dyn gpio::Pin,
-    data_4_pin: &'a dyn gpio::Pin,
-    data_5_pin: &'a dyn gpio::Pin,
-    data_6_pin: &'a dyn gpio::Pin,
-    data_7_pin: &'a dyn gpio::Pin,
+    screen_type: &'a dyn HD44780Gpio,
 
     width: Cell<u8>,
     height: Cell<u8>,
@@ -145,7 +155,16 @@ pub struct HD44780<'a, A: Alarm<'a>> {
     write_offset: Cell<u8>,
 }
 
-impl<'a, A: Alarm<'a>> HD44780<'a, A> {
+pub struct HD44780DirectGpio<'a> {
+    rs_pin: &'a (dyn gpio::Pin + 'a),
+    en_pin: &'a (dyn gpio::Pin + 'a),
+    data_4_pin: &'a (dyn gpio::Pin + 'a),
+    data_5_pin: &'a (dyn gpio::Pin + 'a),
+    data_6_pin: &'a (dyn gpio::Pin + 'a),
+    data_7_pin: &'a (dyn gpio::Pin + 'a),
+}
+
+impl<'a> HD44780DirectGpio<'a> {
     pub fn new(
         rs_pin: &'a dyn gpio::Pin,
         en_pin: &'a dyn gpio::Pin,
@@ -153,22 +172,114 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
         data_5_pin: &'a dyn gpio::Pin,
         data_6_pin: &'a dyn gpio::Pin,
         data_7_pin: &'a dyn gpio::Pin,
-        row_offsets: &'static mut [u8],
-        alarm: &'a A,
-    ) -> HD44780<'a, A> {
+    ) -> HD44780DirectGpio<'a> {
         rs_pin.make_output();
         en_pin.make_output();
         data_4_pin.make_output();
         data_5_pin.make_output();
         data_6_pin.make_output();
         data_7_pin.make_output();
-        HD44780 {
+
+        HD44780DirectGpio {
             rs_pin: rs_pin,
             en_pin: en_pin,
             data_4_pin: data_4_pin,
             data_5_pin: data_5_pin,
             data_6_pin: data_6_pin,
             data_7_pin: data_7_pin,
+        }
+    }
+}
+
+pub struct HD44780I2C<'a> {
+    mcp230xx: &'a static mcp230xx::MCP230xx
+}
+
+impl<'a> HD44780I2C<'a> {
+    pub fn new(
+        mcp230xx: &'a static mcp230xx::MCP230xx
+    ) -> HD44780I2C {
+        HD44780I2C {
+            mcp230xx: mcp230xx
+        }
+    }
+}
+
+impl<'a> HD44780Gpio for HD44780DirectGpio<'a> {
+    fn set(&self, pin: HD44780Pin, value: u8) {
+        match pin {
+            HD44780Pin::DATA => {
+                debug! ("{}", value);
+                if (value >> 0) & 0x01 != 0 {
+                    self.data_4_pin.set();
+                } else {
+                    self.data_4_pin.clear();
+                }
+        
+                if (value >> 1) & 0x01 != 0 {
+                    self.data_5_pin.set();
+                } else {
+                    self.data_5_pin.clear();
+                }
+        
+                if (value >> 2) & 0x01 != 0 {
+                    self.data_6_pin.set();
+                } else {
+                    self.data_6_pin.clear();
+                }
+        
+                if (value >> 3) & 0x01 != 0 {
+                    self.data_7_pin.set()
+                } else {
+                    self.data_7_pin.clear()
+                }
+            }
+            _ => {}
+        }
+        match value {
+
+            0 => match pin {
+                HD44780Pin::EN => self.en_pin.clear(),
+                HD44780Pin::RS => self.rs_pin.clear(),
+                // HD44780Pin::DATA => {
+                //     self.data_4_pin.clear();
+                //     self.data_5_pin.clear();
+                //     self.data_6_pin.clear();
+                //     self.data_7_pin.clear();
+                _ => {}
+            }
+
+            1 => match pin {
+                HD44780Pin::EN => self.en_pin.set(),
+                HD44780Pin::RS => self.rs_pin.set(),
+                // HD44780Pin::DATA => {
+                //     self.data_4_pin.set();
+                //     self.data_5_pin.set();
+                //     self.data_6_pin.set();
+                //     self.data_7_pin.set();
+                // }
+                _ => {}
+            }
+            
+            _ => {}
+            
+        } 
+    }
+
+    fn get(&self, _pin: HD44780Pin) -> u8 {
+        0 
+        // toate sunt de output momentan
+    }
+}
+
+impl<'a, A: Alarm<'a>> HD44780<'a, A> {
+    pub fn new(
+        screen_type: &'a dyn HD44780Gpio,
+        row_offsets: &'static mut [u8],
+        alarm: &'a A,
+    ) -> HD44780<'a, A> {
+        HD44780 {
+            screen_type: screen_type,
             width: Cell::new(0),
             height: Cell::new(0),
             display_function: Cell::new(LCD_4BITMODE | LCD_1LINE | LCD_5X8DOTS),
@@ -271,7 +382,8 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
     ///
     fn pulse(&self, after_pulse_status: LCDStatus) {
         self.lcd_after_pulse_status.set(after_pulse_status);
-        self.en_pin.clear();
+        self.screen_type.set(HD44780Pin::EN, 0);
+        // self.screen_type.en_pin.clear();
         self.set_delay(500, LCDStatus::PulseLow);
     }
 
@@ -286,29 +398,31 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
     ///  self.write_4_bits(27, LCDStatus::Idle);
     ///
     fn write_4_bits(&self, value: u8, next_status: LCDStatus) {
-        if (value >> 0) & 0x01 != 0 {
-            self.data_4_pin.set();
-        } else {
-            self.data_4_pin.clear();
-        }
+        // if (value >> 0) & 0x01 != 0 {
+        //     self.screen_type.data_4_pin.set();
+        // } else {
+        //     self.screen_type.data_4_pin.clear();
+        // }
 
-        if (value >> 1) & 0x01 != 0 {
-            self.data_5_pin.set();
-        } else {
-            self.data_5_pin.clear();
-        }
+        // if (value >> 1) & 0x01 != 0 {
+        //     self.screen_type.data_5_pin.set();
+        // } else {
+        //     self.screen_type.data_5_pin.clear();
+        // }
 
-        if (value >> 2) & 0x01 != 0 {
-            self.data_6_pin.set();
-        } else {
-            self.data_6_pin.clear();
-        }
+        // if (value >> 2) & 0x01 != 0 {
+        //     self.screen_type.data_6_pin.set();
+        // } else {
+        //     self.screen_type.data_6_pin.clear();
+        // }
 
-        if (value >> 3) & 0x01 != 0 {
-            self.data_7_pin.set();
-        } else {
-            self.data_7_pin.clear();
-        }
+        // if (value >> 3) & 0x01 != 0 {
+        //     self.screen_type.data_7_pin.set();
+        // } else {
+        //     self.screen_type.data_7_pin.clear();
+        // }
+        
+        self.screen_type.set(HD44780Pin::DATA, value);
 
         self.pulse(next_status);
     }
@@ -342,13 +456,16 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
             }
 
             LCDStatus::Begin0 => {
-                self.rs_pin.clear();
-                self.en_pin.clear();
+                // self.screen_type.rs_pin.clear();
+                // self.screen_type.en_pin.clear();
+                self.screen_type.set(HD44780Pin::RS, 0);
+                self.screen_type.set(HD44780Pin::EN, 0);
 
                 if (self.display_function.get() & LCD_8BITMODE) == 0 {
                     self.write_4_bits(0x03, LCDStatus::Begin0_1);
                 } else {
-                    self.rs_pin.clear();
+                    // self.screen_type.rs_pin.clear();
+                    self.screen_type.set(HD44780Pin::RS, 0);
                     self.lcd_command(
                         (LCD_FUNCTIONSET | self.display_function.get()) >> 4,
                         LCDStatus::Begin4,
@@ -446,7 +563,8 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
             }
 
             LCDStatus::PulseLow => {
-                self.en_pin.set();
+                // self.screen_type.en_pin.set();
+                self.screen_type.set(HD44780Pin::EN, 1);
                 self.set_delay(500, LCDStatus::PulseHigh);
             }
 
@@ -458,7 +576,8 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
             }
 
             LCDStatus::PulseHigh => {
-                self.en_pin.clear();
+                // self.screen_type.en_pin.clear();
+                self.screen_type.set(HD44780Pin::EN, 0);
                 self.set_delay(500, self.lcd_after_pulse_status.get());
             }
         }
@@ -494,7 +613,8 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
     fn lcd_command(&self, value: u8, next_state: LCDStatus) {
         self.lcd_after_command_status.set(next_state);
         self.command_to_finish.set(value);
-        self.rs_pin.clear();
+        // self.screen_type.rs_pin.clear();
+        self.screen_type.set(HD44780Pin::RS, 0);
         self.write_4_bits(value >> 4, LCDStatus::Command);
     }
 
@@ -550,7 +670,8 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
         if self.write_len.get() == 0 {
             self.done_printing.set(true);
         }
-        self.rs_pin.set();
+        // self.screen_type.rs_pin.set();
+        self.screen_type.set(HD44780Pin::RS, 1);
         self.command_to_finish.set(value);
         self.write_4_bits(value >> 4, LCDStatus::Printing);
     }
@@ -655,3 +776,20 @@ impl<'a, A: Alarm<'a>> TextScreen for HD44780<'a, A> {
         }
     }
 }
+
+// pub struct HD44780I2C<'a, A: Alarm<'a>> {
+//     alarm: &'a A,
+//     mcp23008: Option<&'a mcp230xx::MCP230xx<'a>>,
+// }
+
+// impl<'a, A: Alarm<'a>> HD44780I2C<'a, A> {
+//     pub fn new(
+//         alarm: &'a A,
+//         mcp230xxx: Option<&'a mcp230xx::MCP230xx<'a>>
+//     ) -> HD44780I2C {
+//         HD44780I2C {
+//             alarm: alarm,
+//             mcp23008: mcp230xx,
+//         }
+//     }
+// }
