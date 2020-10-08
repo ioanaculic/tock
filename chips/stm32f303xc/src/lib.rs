@@ -17,10 +17,12 @@ pub mod exti;
 pub mod flash;
 pub mod gpio;
 pub mod i2c;
+pub mod pwm;
 pub mod rcc;
 pub mod spi;
 pub mod syscfg;
 pub mod tim2;
+pub mod tim4;
 pub mod usart;
 use cortexm4::{
     generic_isr, hard_fault_handler, svc_handler, systick_handler, unhandled_interrupt,

@@ -9,6 +9,7 @@
 #![feature(const_in_array_repeat_expressions)]
 #![deny(missing_docs)]
 
+use capsules::driver::NUM::Adc;
 use capsules::lsm303dlhc;
 use capsules::virtual_alarm::VirtualMuxAlarm;
 use components::gpio::GpioComponent;
@@ -17,6 +18,7 @@ use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferred
 use kernel::component::Component;
 use kernel::hil::gpio::Configure;
 use kernel::hil::gpio::Output;
+use kernel::hil::pwm::Pwm;
 use kernel::hil::time::Counter;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
@@ -174,19 +176,19 @@ unsafe fn set_pin_primary_functions() {
     stm32f303xc::spi::SPI1.enable_clock();
 
     // I2C1 has the LSM303DLHC sensor connected
-    PinId::PB06.get_pin().as_ref().map(|pin| {
-        pin.set_mode(Mode::AlternateFunctionMode);
-        pin.set_floating_state(kernel::hil::gpio::FloatingState::PullNone);
-        // AF4 is I2C
-        pin.set_alternate_function(AlternateFunction::AF4);
-    });
-    PinId::PB07.get_pin().as_ref().map(|pin| {
-        pin.make_output();
-        pin.set_floating_state(kernel::hil::gpio::FloatingState::PullNone);
-        pin.set_mode(Mode::AlternateFunctionMode);
-        // AF4 is I2C
-        pin.set_alternate_function(AlternateFunction::AF4);
-    });
+    // PinId::PB06.get_pin().as_ref().map(|pin| {
+    //     pin.set_mode(Mode::AlternateFunctionMode);
+    //     pin.set_floating_state(kernel::hil::gpio::FloatingState::PullNone);
+    //     // AF4 is I2C
+    //     pin.set_alternate_function(AlternateFunction::AF4);
+    // });
+    // PinId::PB07.get_pin().as_ref().map(|pin| {
+    //     pin.make_output();
+    //     pin.set_floating_state(kernel::hil::gpio::FloatingState::PullNone);
+    //     pin.set_mode(Mode::AlternateFunctionMode);
+    //     // AF4 is I2C
+    //     pin.set_alternate_function(AlternateFunction::AF4);
+    // });
 
     // ADC1
     PinId::PA00.get_pin().as_ref().map(|pin| {
@@ -262,6 +264,36 @@ unsafe fn set_pin_primary_functions() {
 
     PinId::PB15.get_pin().as_ref().map(|pin| {
         pin.set_mode(stm32f303xc::gpio::Mode::AnalogMode);
+    });
+
+    // PWM
+
+    PinId::PB06.get_pin().as_ref().map(|pin| {
+        pin.make_output();
+        pin.set_mode(stm32f303xc::gpio::Mode::AlternateFunctionMode);
+        pin.set_alternate_function(AlternateFunction::AF2);
+        pin.set_speed(stm32f303xc::gpio::Speed::HighSpeed);
+    });
+
+    PinId::PB07.get_pin().as_ref().map(|pin| {
+        pin.make_output();
+        pin.set_mode(stm32f303xc::gpio::Mode::AlternateFunctionMode);
+        pin.set_alternate_function(AlternateFunction::AF2);
+        pin.set_speed(stm32f303xc::gpio::Speed::HighSpeed);
+    });
+
+    PinId::PB08.get_pin().as_ref().map(|pin| {
+        pin.make_output();
+        pin.set_mode(stm32f303xc::gpio::Mode::AlternateFunctionMode);
+        pin.set_alternate_function(AlternateFunction::AF2);
+        pin.set_speed(stm32f303xc::gpio::Speed::HighSpeed);
+    });
+
+    PinId::PB09.get_pin().as_ref().map(|pin| {
+        pin.make_output();
+        pin.set_mode(stm32f303xc::gpio::Mode::AlternateFunctionMode);
+        pin.set_alternate_function(AlternateFunction::AF2);
+        pin.set_speed(stm32f303xc::gpio::Speed::HighSpeed);
     });
 
     stm32f303xc::i2c::I2C1.enable_clock();
@@ -487,7 +519,7 @@ pub unsafe fn reset_handler() {
             48 => stm32f303xc::gpio::PinId::PE04.get_pin().as_ref().unwrap(),
             49 => stm32f303xc::gpio::PinId::PE02.get_pin().as_ref().unwrap(),
             50 => stm32f303xc::gpio::PinId::PE00.get_pin().as_ref().unwrap(),
-            51 => stm32f303xc::gpio::PinId::PB08.get_pin().as_ref().unwrap(),
+            // 51 => stm32f303xc::gpio::PinId::PB08.get_pin().as_ref().unwrap(),
             // 52 => stm32f303xc::gpio::PinId::PB06.get_pin().as_ref().unwrap(),
             53 => stm32f303xc::gpio::PinId::PB04.get_pin().as_ref().unwrap(),
             54 => stm32f303xc::gpio::PinId::PD07.get_pin().as_ref().unwrap(),
@@ -510,7 +542,7 @@ pub unsafe fn reset_handler() {
             70 => stm32f303xc::gpio::PinId::PE05.get_pin().as_ref().unwrap(),
             71 => stm32f303xc::gpio::PinId::PE03.get_pin().as_ref().unwrap(),
             72 => stm32f303xc::gpio::PinId::PE01.get_pin().as_ref().unwrap(),
-            73 => stm32f303xc::gpio::PinId::PB09.get_pin().as_ref().unwrap(),
+            // 73 => stm32f303xc::gpio::PinId::PB09.get_pin().as_ref().unwrap(),
             // 74 => stm32f303xc::gpio::PinId::PB07.get_pin().as_ref().unwrap(),
             75 => stm32f303xc::gpio::PinId::PB05.get_pin().as_ref().unwrap(),
             76 => stm32f303xc::gpio::PinId::PB03.get_pin().as_ref().unwrap(),
@@ -658,6 +690,18 @@ pub unsafe fn reset_handler() {
     .finalize(components::nv_storage_component_helper!(
         stm32f303xc::flash::Flash
     ));
+    // stm32f303xc::adc::ADC1.set_client(adc);
+    // stm32f303xc::tim4::TIM4.start_pwm(
+    //     &stm32f303xc::tim4::Pin::Pin3,
+    //     stm32f303xc::tim4::TIM4.get_maximum_frequency_hz() / 2666,
+    //     stm32f303xc::tim4::TIM4.get_maximum_duty_cycle() * 4 / 6,
+    // );
+
+    // stm32f303xc::tim4::TIM4.start_pwm(
+    //     &stm32f303xc::tim4::Pin::Pin2,
+    //     stm32f303xc::tim4::TIM4.get_maximum_frequency_hz() / 2666,
+    //     stm32f303xc::tim4::TIM4.get_maximum_duty_cycle() * 4 / 8,
+    // );
 
     let stm32f3discovery = STM32F3Discovery {
         console: console,

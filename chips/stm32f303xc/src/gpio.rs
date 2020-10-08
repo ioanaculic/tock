@@ -575,6 +575,15 @@ enum_from_primitive! {
     }
 }
 
+enum_from_primitive! {
+    #[repr(u32)]
+    pub enum Speed {
+        LowSpeed = 0b00, // Max 2MHz
+        MediumSpeed = 0b01, // Max 10MHz
+        HighSpeed = 0b11, // Max 50MHz
+    }
+}
+
 pub struct Port {
     registers: StaticRef<GpioRegisters>,
     clock: PortClock,
@@ -710,6 +719,103 @@ impl<'a> Pin<'a> {
 
     pub fn handle_interrupt(&self) {
         self.client.map(|client| client.fired());
+    }
+
+    pub fn set_speed(&self, speed: Speed) {
+        let port = self.pinid.get_port();
+
+        match self.pinid.get_pin_number() {
+            0b0000 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR0.val(speed as u32)),
+            0b0001 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR1.val(speed as u32)),
+            0b0010 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR2.val(speed as u32)),
+            0b0011 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR3.val(speed as u32)),
+            0b0100 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR4.val(speed as u32)),
+            0b0101 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR5.val(speed as u32)),
+            0b0110 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR6.val(speed as u32)),
+            0b0111 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR7.val(speed as u32)),
+            0b1000 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR8.val(speed as u32)),
+            0b1001 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR9.val(speed as u32)),
+            0b1010 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR10.val(speed as u32)),
+            0b1011 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR11.val(speed as u32)),
+            0b1100 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR12.val(speed as u32)),
+            0b1101 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR13.val(speed as u32)),
+            0b1110 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR14.val(speed as u32)),
+            0b1111 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR15.val(speed as u32)),
+            _ => {}
+        }
+    }
+
+    pub fn get_speed(&self) -> Speed {
+        let port = self.pinid.get_port();
+
+        let val = match self.pinid.get_pin_number() {
+            0b0000 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR0),
+            0b0001 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR1),
+            0b0010 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR2),
+            0b0011 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR3),
+            0b0100 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR4),
+            0b0101 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR5),
+            0b0110 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR6),
+            0b0111 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR7),
+            0b1000 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR8),
+            0b1001 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR9),
+            0b1010 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR10),
+            0b1011 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR11),
+            0b1100 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR12),
+            0b1101 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR13),
+            0b1110 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR14),
+            0b1111 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR15),
+            _ => 0,
+        };
+        Speed::from_u32(val).unwrap_or(Speed::LowSpeed)
     }
 
     pub fn get_mode(&self) -> Mode {

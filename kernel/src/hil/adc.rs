@@ -37,7 +37,6 @@ pub trait Adc {
     ///
     /// The returned reference voltage is in millivolts, or `None` if unknown.
     fn get_voltage_reference_mv(&self) -> Option<usize>;
-
     fn set_client(&self, client: &'static dyn Client);
 }
 
