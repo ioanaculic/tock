@@ -5,7 +5,7 @@ PLATFORM=stm32f412gdiscovery
 
 include ../Makefile.common
 
-APP=../../../libtock-c/examples/lvgl/build/cortex-m4/cortex-m4.tbf
+APP=../../../libtock-c/examples/screen/build/cortex-m4/cortex-m4.tbf
 KERNEL=$(TOCK_ROOT_DIRECTORY)/target/$(TARGET)/debug/$(PLATFORM).elf
 KERNEL_WITH_APP=$(TOCK_ROOT_DIRECTORY)/target/$(TARGET)/debug/$(PLATFORM)-app.elf
 

@@ -354,6 +354,13 @@ unsafe fn setup_peripherals() {
 pub unsafe fn reset_handler() {
     stm32f412g::init();
 
+    stm32f412g::flash::FLASH.enable_prefetch();
+    stm32f412g::flash::FLASH.enable_instruction_cache();
+    stm32f412g::flash::FLASH.enable_data_cache();
+    stm32f412g::flash::FLASH.set_latency(3);
+
+    stm32f412g::rcc::RCC.set_100_mhz();
+
     // We use the default HSI 16Mhz clock
 
     set_pin_primary_functions();
@@ -400,7 +407,6 @@ pub unsafe fn reset_handler() {
 
     // Setup the console.
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
-    
     // uncomment the lines that contains esp_console to use esp_console
     // let console_esp = components::esp_serial_component::ESPSerialComponent::new(board_kernel, uart_mux)
     //     .finalize(());
@@ -571,7 +577,7 @@ pub unsafe fn reset_handler() {
     tft.init();
 
     let screen = components::screen::ScreenComponent::new(board_kernel, tft, Some(tft))
-        .finalize(components::screen_buffer_size!(40960));
+        .finalize(components::screen_buffer_size!(8196));
 
     let touch =
         components::touch::TouchComponent::new(board_kernel, ft6x06, Some(ft6x06), Some(tft))

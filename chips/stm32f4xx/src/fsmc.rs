@@ -7,6 +7,8 @@ use kernel::common::StaticRef;
 use kernel::hil::bus8080::{Bus8080, BusWidth, Client};
 use kernel::{ClockInterface, ReturnCode};
 
+use kernel::debug;
+
 use crate::deferred_calls::DeferredCallTask;
 
 /// FSMC peripheral interface
@@ -312,6 +314,7 @@ impl Bus8080<'static> for Fsmc {
             self.buffer.replace(buffer);
             self.bus_width.set(bytes);
             self.len.set(len);
+            debug!("len {}", len);
             DEFERRED_CALL.set();
             ReturnCode::SUCCESS
         } else {
