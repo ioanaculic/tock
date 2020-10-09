@@ -1,9 +1,10 @@
 use core::mem::MaybeUninit;
 use capsules::virtual_i2c::{MuxI2C, I2CDevice};
-use capsules::mcp230xxx::MCP230xx;
+use capsules::mcp230xx::MCP230xx;
 use kernel::component::Component;
 use kernel::static_init_half;
 
+#[macro_export]
 macro_rules! mcp230xx_component_helper {
     () => {{
         use capsules::mcp230xx::MCP230xx;
@@ -18,19 +19,19 @@ macro_rules! mcp230xx_component_helper {
     };};
 }
 
-pub struct MCP230XXComponent<'a> {
-    mux_i2c: &'static MuxI2C<'a>,
+pub struct MCP230XXComponent {
+    mux_i2c: &'static MuxI2C<'static>,
 }
 
-impl<'a> MCP230XXComponent<'a> {
-    pub fn new(mux_i2c: &'static MuxI2C<'a>) -> MCP230XXComponent {
+impl MCP230XXComponent {
+    pub fn new(mux_i2c: &'static MuxI2C<'static>) -> MCP230XXComponent {
         MCP230XXComponent {
             mux_i2c: mux_i2c
         }
     }
 }
 
-impl<'a> Component for MCP230XXComponent<'a> {
+impl Component for MCP230XXComponent {
     type StaticInput = (
         &'static mut MaybeUninit<I2CDevice<'static>>,
         &'static mut MaybeUninit<MCP230xx<'static>>,
@@ -41,7 +42,7 @@ impl<'a> Component for MCP230XXComponent<'a> {
         let mcp230xx_i2c = static_init_half!(
             static_input.0,
             I2CDevice<'static>,
-            I2CDevice::new(self.mux_i2c, 0x20));
+            I2CDevice::new(&self.mux_i2c, 0x20)
         );
 
         let mcp230xx = static_init_half!(

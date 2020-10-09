@@ -300,9 +300,10 @@ pub unsafe fn reset_handler() {
         components::mcp230xx_component_helper!(),
     );
 
-    let lcd_i2c = components::hd44780::HD44780ComponentI2C::new(mux_alarm, mcp230xx).finalize(
+    let lcd_i2c = components::hd44780::HD44780Component::new(mux_alarm).finalize(
         components::hd44780_i2c_component_helper!(
             stm32f429zi::tim2::Tim2,
+            mcp230xx
         ),  
     );
 
@@ -324,7 +325,7 @@ pub unsafe fn reset_handler() {
         ),
     );
 
-    let text_screen = components::text_screen::TextScreenComponent::new(board_kernel, lcd)
+    let text_screen = components::text_screen::TextScreenComponent::new(board_kernel, lcd_i2c)
         .finalize(components::screen_buffer_size!(64));
 
     lcd.init(16, 2);

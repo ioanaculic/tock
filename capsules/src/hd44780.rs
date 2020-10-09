@@ -54,6 +54,7 @@ use crate::mcp230xx;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::gpio;
 use kernel::debug;
+use kernel::hil::gpio_async::Port;
 use kernel::hil::text_screen::{TextScreen, TextScreenClient};
 use kernel::hil::time::{self, Alarm, Frequency};
 use kernel::ReturnCode;
@@ -83,6 +84,7 @@ static LCD_1LINE: u8 = 0x00;
 static LCD_5X8DOTS: u8 = 0x00;
 
 pub static mut ROW_OFFSETS: [u8; 4] = [0; 4];
+pub static mut MCP_PINS: [u8; 6] = [1, 2, 3, 4, 5, 6];
 
 /// The states the program can be in.
 #[derive(Copy, Clone, PartialEq)]
@@ -119,8 +121,6 @@ pub enum HD44780Pin {
 
 pub trait HD44780Gpio {
     fn set(&self, pin: HD44780Pin, value: u8);
-
-    fn get(&self, pin: HD44780Pin) -> u8;
 }
 
 
@@ -191,20 +191,6 @@ impl<'a> HD44780DirectGpio<'a> {
     }
 }
 
-pub struct HD44780I2C<'a> {
-    mcp230xx: &'a static mcp230xx::MCP230xx
-}
-
-impl<'a> HD44780I2C<'a> {
-    pub fn new(
-        mcp230xx: &'a static mcp230xx::MCP230xx
-    ) -> HD44780I2C {
-        HD44780I2C {
-            mcp230xx: mcp230xx
-        }
-    }
-}
-
 impl<'a> HD44780Gpio for HD44780DirectGpio<'a> {
     fn set(&self, pin: HD44780Pin, value: u8) {
         match pin {
@@ -265,12 +251,73 @@ impl<'a> HD44780Gpio for HD44780DirectGpio<'a> {
             
         } 
     }
+}
 
-    fn get(&self, _pin: HD44780Pin) -> u8 {
-        0 
-        // toate sunt de output momentan
+pub struct HD44780I2C<'a> {
+    mcp230xx: &'a mcp230xx::MCP230xx<'a>,
+    mcp_pins: TakeCell<'static, [u8]>
+}
+
+impl<'a> HD44780I2C<'a> {
+    pub fn new(
+        mcp230xx: &'a mcp230xx::MCP230xx<'a>,
+        // mcp230xx: &'a dyn gpio_async::Port::Port,
+        mcp_pins: &'static mut [u8],
+    ) -> HD44780I2C<'a> {
+        HD44780I2C {
+            mcp230xx: mcp230xx,
+            mcp_pins: TakeCell::new(mcp_pins),
+        }
     }
 }
+
+impl<'a> HD44780Gpio for HD44780I2C<'a> {
+    fn set(&self, pin: HD44780Pin, value: u8) {
+        match value {
+            0 => match pin {
+                HD44780Pin::RS => {
+                    self.mcp_pins.map(|pins_buffer| {
+                        self.mcp230xx.clear(pins_buffer[0] as usize);
+                    });
+                }
+
+                HD44780Pin::EN => {
+                    self.mcp_pins.map(|pins_buffer| {
+                        self.mcp230xx.clear(pins_buffer[1] as usize);
+                    });
+                }
+
+                _ => {}
+            }
+
+            1 => match pin {
+                HD44780Pin::RS => {
+                    self.mcp_pins.map(|pins_buffer| {
+                        self.mcp230xx.set(pins_buffer[0] as usize);
+                    });
+                }
+
+                HD44780Pin::EN => {
+                    self.mcp_pins.map(|pins_buffer| {
+                        self.mcp230xx.set(pins_buffer[1] as usize);
+                    });
+                }
+
+                _ => {}
+            }
+            _ => {}
+        }
+        match pin {
+            HD44780Pin::DATA => {
+                self.mcp230xx.set_pins_values(1, value);
+            }
+
+            _ => {}
+        }
+    }
+}
+
+
 
 impl<'a, A: Alarm<'a>> HD44780<'a, A> {
     pub fn new(
