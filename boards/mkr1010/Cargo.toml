@@ -1,0 +1,13 @@
+[package]
+name = "mkr1010"
+version = "0.1.0"
+authors = ["Tock Project Developers <tock-dev@googlegroups.com>"]
+build = "build.rs"
+edition = "2018"
+
+[dependencies]
+cortexm0 = { path = "../../arch/cortex-m0" }
+capsules = { path = "../../capsules" }
+kernel = { path = "../../kernel" }
+samd21 = { path = "../../chips/samd21" }
+components = { path = "../components" }
