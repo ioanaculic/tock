@@ -60,12 +60,12 @@ macro_rules! hd44780_i2c_component_helper {
         static mut BUF1: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut BUF2: MaybeUninit<HD44780<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
-        static mut i2c_buffer: MaybeUninit<MCP230xx<'static>> = MaybeUninit::uninit();
-        let mcp_i2c = static_init_half!(&mut i2c_buffer, HD44780I2C<'static>, I2C::new($M, &mut capsules::hd44780::MCP_PINS));
+        static i2c_buffer: MaybeUninit<HD44780I2C<'static>> = MaybeUninit::uninit();
+        let i2c = static_init_half!(&i2c_buffer, HD44780I2C<'static>, HD44780I2C::new($M, &mut capsules::hd44780::MCP_PINS));
         (
             &mut BUF1,
             &mut BUF2,
-            &mut mcp_i2c,
+            i2c,
         )
     };};
 }

@@ -307,28 +307,28 @@ pub unsafe fn reset_handler() {
         ),  
     );
 
-    let lcd = components::hd44780::HD44780Component::new(mux_alarm).finalize(
-        components::hd44780_gpio_component_helper!(
-            // rs pin
-            stm32f429zi::gpio::PinId::PF13.get_pin().as_ref().unwrap(),
-            // en pin
-            stm32f429zi::gpio::PinId::PE11.get_pin().as_ref().unwrap(),
-            // data 4 pin
-            stm32f429zi::gpio::PinId::PF14.get_pin().as_ref().unwrap(),
-            // data 5 pin
-            stm32f429zi::gpio::PinId::PE13.get_pin().as_ref().unwrap(),
-            // data 6 pin
-            stm32f429zi::gpio::PinId::PF15.get_pin().as_ref().unwrap(),
-            // data 7 pin
-            stm32f429zi::gpio::PinId::PG14.get_pin().as_ref().unwrap(),
-            stm32f429zi::tim2::Tim2
-        ),
-    );
+    // let lcd = components::hd44780::HD44780Component::new(mux_alarm).finalize(
+    //     components::hd44780_gpio_component_helper!(
+    //         // rs pin
+    //         stm32f429zi::gpio::PinId::PF13.get_pin().as_ref().unwrap(),
+    //         // en pin
+    //         stm32f429zi::gpio::PinId::PE11.get_pin().as_ref().unwrap(),
+    //         // data 4 pin
+    //         stm32f429zi::gpio::PinId::PF14.get_pin().as_ref().unwrap(),
+    //         // data 5 pin
+    //         stm32f429zi::gpio::PinId::PE13.get_pin().as_ref().unwrap(),
+    //         // data 6 pin
+    //         stm32f429zi::gpio::PinId::PF15.get_pin().as_ref().unwrap(),
+    //         // data 7 pin
+    //         stm32f429zi::gpio::PinId::PG14.get_pin().as_ref().unwrap(),
+    //         stm32f429zi::tim2::Tim2
+    //     ),
+    // );
 
     let text_screen = components::text_screen::TextScreenComponent::new(board_kernel, lcd_i2c)
         .finalize(components::screen_buffer_size!(64));
 
-    lcd.init(16, 2);
+    lcd_i2c.init(16, 2);
 
     // GPIO
     let gpio = GpioComponent::new(
