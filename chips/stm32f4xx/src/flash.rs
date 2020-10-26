@@ -1,17 +1,8 @@
 //! Embedded Flash Memory Controller
 
-use core::cell::Cell;
-use kernel::common::cells::OptionalCell;
-use kernel::common::cells::TakeCell;
-use kernel::common::cells::VolatileCell;
-use kernel::common::deferred_call::DeferredCall;
 use kernel::common::registers::register_bitfields;
 use kernel::common::registers::{ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
-use kernel::hil;
-use kernel::ReturnCode;
-
-use crate::deferred_call_tasks::DeferredCallTask;
 
 const FLASH_BASE: StaticRef<FlashRegisters> =
     unsafe { StaticRef::new(0x4002_3C00 as *const FlashRegisters) };
@@ -196,19 +187,14 @@ register_bitfields! [u32,
 
 ];
 
-/// This mechanism allows us to schedule "interrupts" even if the hardware
-/// does not support them.
-static DEFERRED_CALL: DeferredCall<DeferredCallTask> =
-    unsafe { DeferredCall::new(DeferredCallTask::Flash) };
-
 const KEY1: u32 = 0x45670123;
 const KEY2: u32 = 0xCDEF89AB;
 
 const OPTKEY1: u32 = 0x08192A3B;
 const OPTKEY2: u32 = 0x4C5D6E7F;
 
-const FLASH_START: usize = 0x0800_0000;
-const FLASH_END: usize = 0x080F_FFFF;
+// const FLASH_START: usize = 0x0800_0000;
+// const FLASH_END: usize = 0x080F_FFFF;
 
 pub static mut FLASH: Flash = Flash::new();
 
@@ -233,26 +219,12 @@ pub enum Psize {
 
 pub struct Flash {
     registers: StaticRef<FlashRegisters>,
-    client: OptionalCell<&'static dyn hil::flash::ClientPageless>,
-    buffer: TakeCell<'static, [u8]>,
-    buffer_length: Cell<usize>,
-    write_address: Cell<usize>,
-    write_counter: Cell<usize>,
-    psize: Cell<Psize>,
-    state: Cell<FlashState>,
 }
 
 impl Flash {
     pub const fn new() -> Flash {
         Flash {
             registers: FLASH_BASE,
-            client: OptionalCell::empty(),
-            buffer: TakeCell::empty(),
-            buffer_length: Cell::new(0),
-            write_address: Cell::new(0),
-            write_counter: Cell::new(0),
-            psize: Cell::new(Psize::Word),
-            state: Cell::new(FlashState::Ready),
         }
     }
 
@@ -312,272 +284,21 @@ impl Flash {
         }
     }
 
-    fn program(&self) {
-        self.buffer.take().map(|buffer| {
-            let i = self.write_counter.get();
-            let address = self.write_address.get();
-
-            match self.psize.get() {
-                Psize::Byte => {
-                    let location = unsafe { &*((address + i) as *const VolatileCell<u8>) };
-                    location.set(buffer[i]);
-                }
-                Psize::HalfWord => {
-                    let value = (buffer[i + 0] as u16) << 0 | (buffer[i + 1] as u16) << 8;
-                    let location = unsafe { &*((address + i) as *const VolatileCell<u16>) };
-                    location.set(value);
-                }
-                Psize::Word => {
-                    let value = (buffer[i] as u32) << 0
-                        | (buffer[i + 1] as u32) << 8
-                        | (buffer[i + 2] as u32) << 16
-                        | (buffer[i + 3] as u32) << 24;
-                    let location = unsafe { &*((address + i) as *const VolatileCell<u32>) };
-                    location.set(value);
-                }
-                Psize::DoubleWord => {
-                    let value = (buffer[i] as u64) << 0
-                        | (buffer[i + 1] as u64) << 8
-                        | (buffer[i + 2] as u64) << 16
-                        | (buffer[i + 3] as u64) << 24
-                        | (buffer[i + 4] as u64) << 32
-                        | (buffer[i + 5] as u64) << 40
-                        | (buffer[i + 6] as u64) << 48
-                        | (buffer[i + 7] as u64) << 56;
-                    let location = unsafe { &*((address + i) as *const VolatileCell<u64>) };
-                    location.set(value);
-                }
-            }
-
-            self.buffer.replace(buffer);
-        });
+    pub fn enable_instruction_cache(&self) {
+        self.registers.acr.modify(AccessControl::ICEN::SET);
     }
 
-    pub fn handle_interrupt(&self) {
-        if self.registers.sr.is_set(Status::EOP) {
-            // Cleared by writing a 1
-            self.registers.sr.modify(Status::EOP::SET);
-            match self.state.get() {
-                FlashState::Write => {
-                    let inc = match self.psize.get() {
-                        Psize::Byte => 1,
-                        Psize::HalfWord => 2,
-                        Psize::Word => 4,
-                        Psize::DoubleWord => 8,
-                    };
-
-                    // This increments the write counter according to the
-                    // parallelism value used.
-                    self.write_counter.set(self.write_counter.get() + inc);
-
-                    if self.write_counter.get() == self.buffer_length.get() {
-                        self.registers.cr.modify(Control::PG::CLEAR);
-                        self.state.set(FlashState::Ready);
-                        self.write_counter.set(0);
-
-                        self.client.map(|client| {
-                            self.buffer.take().map(|buffer| {
-                                client.write_complete(buffer, hil::flash::Error::CommandComplete);
-                            });
-                        });
-                    } else {
-                        self.program();
-                    }
-                }
-                FlashState::Erase => {
-                    if self.registers.cr.is_set(Control::SER) {
-                        self.registers.cr.modify(Control::SER::CLEAR);
-                    }
-
-                    if self.registers.cr.is_set(Control::MER) {
-                        self.registers.cr.modify(Control::MER::CLEAR);
-                    }
-
-                    self.state.set(FlashState::Ready);
-                    self.client.map(|client| {
-                        client.erase_complete(hil::flash::Error::CommandComplete);
-                    });
-                }
-                FlashState::WriteOption => {
-                    self.client.map(|client| {
-                        self.buffer.take().map(|buffer| {
-                            client.write_complete(buffer, hil::flash::Error::CommandComplete);
-                        });
-                    });
-                }
-                _ => {}
-            }
-        }
-
-        if self.registers.sr.is_set(Status::PGSERR) {
-            // Cleared by writing a 1.
-            self.registers.sr.modify(Status::PGSERR::SET);
-            self.client.map(|client| {
-                self.buffer.take().map(|buffer| {
-                    client.write_complete(
-                        buffer,
-                        hil::flash::Error::FlashErrorSpecific("Programming Sequence Error"),
-                    );
-                });
-            });
-        }
-
-        if self.registers.sr.is_set(Status::PGPERR) {
-            // Cleared by writing a 1.
-            self.registers.sr.modify(Status::PGPERR::SET);
-            self.client.map(|client| {
-                self.buffer.take().map(|buffer| {
-                    client.write_complete(
-                        buffer,
-                        hil::flash::Error::FlashErrorSpecific("Programming Parallelism Error"),
-                    );
-                });
-            });
-        }
-
-        if self.registers.sr.is_set(Status::PGAERR) {
-            // Cleared by writing a 1.
-            self.registers.sr.modify(Status::PGAERR::SET);
-            self.client.map(|client| {
-                self.buffer.take().map(|buffer| {
-                    client.write_complete(
-                        buffer,
-                        hil::flash::Error::FlashErrorSpecific("Programming Alignment Error"),
-                    );
-                });
-            });
-        }
-
-        if self.registers.sr.is_set(Status::WRPERR) {
-            // Cleared by writing a 1.
-            self.registers.sr.modify(Status::WRPERR::SET);
-            match self.state.get() {
-                FlashState::Write => {
-                    self.client.map(|client| {
-                        self.buffer.take().map(|buffer| {
-                            client.write_complete(
-                                buffer,
-                                hil::flash::Error::FlashErrorSpecific("Write Protection Error"),
-                            );
-                        });
-                    });
-                }
-                FlashState::Erase => {
-                    self.client.map(|client| {
-                        client.erase_complete(hil::flash::Error::FlashErrorSpecific(
-                            "Write Protection Error",
-                        ));
-                    });
-                }
-                _ => {}
-            }
-        }
-
-        if self.state.get() == FlashState::Read {
-            self.state.set(FlashState::Ready);
-            self.client.map(|client| {
-                self.buffer.take().map(|buffer| {
-                    client.read_complete(buffer, hil::flash::Error::CommandComplete);
-                });
-            });
-        }
+    pub fn enable_data_cache(&self) {
+        self.registers.acr.modify(AccessControl::DCEN::SET);
     }
 
-    pub fn read(
-        &self,
-        buffer: &'static mut [u8],
-        address: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
-        let mut byte: *const u8 = address as *const u8;
-        unsafe {
-            for i in 0..buffer.len() {
-                buffer[i] = *byte;
-                byte = byte.offset(1);
-            }
-        }
-
-        self.buffer.replace(buffer);
-        self.state.set(FlashState::Read);
-        DEFERRED_CALL.set();
-
-        Ok(())
-    }
-
-    pub fn write(
-        &self,
-        buffer: &'static mut [u8],
-        address: usize,
-    ) -> Result<(), (ReturnCode, &'static mut [u8])> {
-        if address < FLASH_START && address + buffer.len() > FLASH_END {
-            return Err((ReturnCode::EINVAL, buffer));
-        }
-
-        if self.is_locked() {
-            self.unlock();
-        }
-
-        self.enable();
-        self.state.set(FlashState::Write);
-        self.registers.cr.modify(Control::PG::SET);
-
-        self.buffer_length.set(buffer.len());
-        self.buffer.replace(buffer);
-        self.write_address.set(address);
-        self.psize.set(self.get_parallelism().unwrap());
-
-        self.program();
-
-        Ok(())
-    }
-
-    pub fn erase_sector(&self, sector_number: usize) -> ReturnCode {
-        if self.is_locked() {
-            self.unlock();
-        }
-
-        self.enable();
-        self.state.set(FlashState::Erase);
-
-        self.registers.cr.modify(Control::SER::SET);
+    pub fn set_latency(&self, latency: u32) {
         self.registers
-            .cr
-            .modify(Control::SNB.val(sector_number as u32));
-        self.registers.cr.modify(Control::STRT::SET);
-
-        ReturnCode::SUCCESS
+            .acr
+            .modify(AccessControl::LATENCY.val(latency));
     }
 
-    pub fn erase_all(&self) -> ReturnCode {
-        if self.is_locked() {
-            self.unlock();
-        }
-
-        self.enable();
-        self.state.set(FlashState::Erase);
-
-        self.registers.cr.modify(Control::MER::SET);
-        self.registers.cr.modify(Control::STRT::SET);
-
-        ReturnCode::SUCCESS
-    }
-
-    pub fn write_option(&self, buffer: &'static mut [u8]) -> ReturnCode {
-        if self.is_locked_option() {
-            self.unlock_option();
-        }
-
-        self.enable();
-        self.state.set(FlashState::WriteOption);
-        let value = (buffer[0] as u32) << 0
-            | (buffer[1] as u32) << 8
-            | (buffer[2] as u32) << 16
-            | (buffer[3] as u32) << 24;
-
-        self.registers.ocr.set(value);
-        self.registers.ocr.modify(OptionControl::OPTSTRT::SET);
-
-        self.buffer.replace(buffer);
-
-        ReturnCode::SUCCESS
+    pub fn enable_prefetch(&self) {
+        self.registers.acr.modify(AccessControl::PRFTEN::SET);
     }
 }
