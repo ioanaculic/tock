@@ -244,9 +244,10 @@ impl<'a> MCP230xx<'a> {
     }
 
     fn set_pins_bank(&self, bank: u8, values_bits: u8) -> ReturnCode {
+        debug! ("in set_pins_bank, inainte de map cu value: {}", values_bits);
         self.buffer.take().map_or(ReturnCode::EBUSY, |buffer| {
             self.i2c.enable();
-
+            debug! ("dupa un i2c.enable???");
             buffer[0] = self.calc_register_addr(Registers::Gpio, 0);
             self.i2c.write(buffer, 1);
             self.state
@@ -257,13 +258,16 @@ impl<'a> MCP230xx<'a> {
     }
 
     fn set_pin(&self, pin_number: u8, value: PinState) -> ReturnCode {
+
         self.buffer.take().map_or(ReturnCode::EBUSY, |buffer| {
+            debug!("SUNTEM IN SET IN BUFFER");
             self.i2c.enable();
 
             buffer[0] = self.calc_register_addr(Registers::Gpio, pin_number);
+            debug!("{:?}", buffer);
             self.i2c.write(buffer, 1);
             self.state.set(State::SelectGpio(pin_number, value));
-
+        
             ReturnCode::SUCCESS
         })
     }
@@ -396,6 +400,7 @@ impl<'a> MCP230xx<'a> {
 
 impl hil::i2c::I2CClient for MCP230xx<'_> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: hil::i2c::Error) {
+        debug!("Ajungem vreodata aici????????????");
         match self.state.get() {
             State::SelectIoDir(pin_number, direction) => {
                 self.i2c.read(buffer, 1);
@@ -449,10 +454,12 @@ impl hil::i2c::I2CClient for MCP230xx<'_> {
                 self.state.set(State::Done);
             }
             State::SelectGpio(pin_number, value) => {
+                debug! ("SelectGPIOOOOOOOO");
                 self.i2c.read(buffer, 1);
                 self.state.set(State::ReadGpio(pin_number, value));
             }
             State::ReadGpio(pin_number, value) => {
+                debug! ("readGPIOOOO");
                 buffer[1] = match value {
                     PinState::High => buffer[0] | (1 << pin_number),
                     PinState::Low => buffer[0] & !(1 << pin_number),
@@ -540,6 +547,7 @@ impl hil::i2c::I2CClient for MCP230xx<'_> {
                 self.state.set(State::Idle);
             }
             State::Done => {
+                debug! ("am ajuns in done ^_^");
                 self.client.map(|client| {
                     client.done(0);
                 });
@@ -614,6 +622,7 @@ impl gpio_async::Port for MCP230xx<'_> {
     }
 
     fn set(&self, pin: usize) -> ReturnCode {
+        // debug! ("ajungem in set in mcp");
         if pin > ((self.number_of_banks * self.bank_size) - 1) as usize {
             return ReturnCode::EINVAL;
         }
@@ -621,6 +630,7 @@ impl gpio_async::Port for MCP230xx<'_> {
     }
 
     fn clear(&self, pin: usize) -> ReturnCode {
+        // debug! ("ajungem in clear in mcp");
         if pin > ((self.number_of_banks * self.bank_size) - 1) as usize {
             return ReturnCode::EINVAL;
         }
@@ -650,6 +660,7 @@ impl gpio_async::Port for MCP230xx<'_> {
     }
 
     fn set_pins_values(&self, bank: u8, values_bits: u8) -> ReturnCode {
-       self.set_pins_bank(bank, values_bits)
+        // debug! ("ajungem in set_pins_values in mcp");
+        self.set_pins_bank(bank, values_bits)
     }
 }

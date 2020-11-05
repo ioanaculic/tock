@@ -55,6 +55,7 @@ use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::gpio;
 use kernel::debug;
 use kernel::hil::gpio_async::Port;
+use kernel::hil::i2c::{Error, I2CClient};
 use kernel::hil::text_screen::{TextScreen, TextScreenClient};
 use kernel::hil::time::{self, Alarm, Frequency};
 use kernel::ReturnCode;
@@ -195,7 +196,6 @@ impl<'a> HD44780Gpio for HD44780DirectGpio<'a> {
     fn set(&self, pin: HD44780Pin, value: u8) {
         match pin {
             HD44780Pin::DATA => {
-                debug! ("{}", value);
                 if (value >> 0) & 0x01 != 0 {
                     self.data_4_pin.set();
                 } else {
@@ -227,23 +227,12 @@ impl<'a> HD44780Gpio for HD44780DirectGpio<'a> {
             0 => match pin {
                 HD44780Pin::EN => self.en_pin.clear(),
                 HD44780Pin::RS => self.rs_pin.clear(),
-                // HD44780Pin::DATA => {
-                //     self.data_4_pin.clear();
-                //     self.data_5_pin.clear();
-                //     self.data_6_pin.clear();
-                //     self.data_7_pin.clear();
                 _ => {}
             }
 
             1 => match pin {
                 HD44780Pin::EN => self.en_pin.set(),
                 HD44780Pin::RS => self.rs_pin.set(),
-                // HD44780Pin::DATA => {
-                //     self.data_4_pin.set();
-                //     self.data_5_pin.set();
-                //     self.data_6_pin.set();
-                //     self.data_7_pin.set();
-                // }
                 _ => {}
             }
             
@@ -261,7 +250,6 @@ pub struct HD44780I2C<'a> {
 impl<'a> HD44780I2C<'a> {
     pub fn new(
         mcp230xx: &'a mcp230xx::MCP230xx<'a>,
-        // mcp230xx: &'a dyn gpio_async::Port::Port,
         mcp_pins: &'static mut [u8],
     ) -> HD44780I2C<'a> {
         HD44780I2C {
@@ -278,12 +266,14 @@ impl<'a> HD44780Gpio for HD44780I2C<'a> {
                 HD44780Pin::RS => {
                     self.mcp_pins.map(|pins_buffer| {
                         self.mcp230xx.clear(pins_buffer[0] as usize);
+                        // self.mcp230xx.command_complete(&mut mcp230xx::BUFFER, Error::CommandComplete);
                     });
                 }
 
                 HD44780Pin::EN => {
                     self.mcp_pins.map(|pins_buffer| {
                         self.mcp230xx.clear(pins_buffer[1] as usize);
+                        // self.mcp230xx.command_complete(&mut mcp230xx::BUFFER, Error::CommandComplete);
                     });
                 }
 
@@ -294,12 +284,14 @@ impl<'a> HD44780Gpio for HD44780I2C<'a> {
                 HD44780Pin::RS => {
                     self.mcp_pins.map(|pins_buffer| {
                         self.mcp230xx.set(pins_buffer[0] as usize);
+                        // self.mcp230xx.command_complete(&mut mcp230xx::BUFFER, Error::CommandComplete);
                     });
                 }
 
                 HD44780Pin::EN => {
                     self.mcp_pins.map(|pins_buffer| {
                         self.mcp230xx.set(pins_buffer[1] as usize);
+                        // self.mcp230xx.command_complete(&mut mcp230xx::BUFFER, Error::CommandComplete);
                     });
                 }
 
@@ -309,7 +301,11 @@ impl<'a> HD44780Gpio for HD44780I2C<'a> {
         }
         match pin {
             HD44780Pin::DATA => {
+                // debug! ("trebuie sa scriem {}", value);
                 self.mcp230xx.set_pins_values(1, value);
+                self.mcp_pins.map(|pins_buffer| {
+                    // self.mcp230xx.command_complete(&mut mcp230xx::BUFFER, Error::CommandComplete);
+                });
             }
 
             _ => {}
@@ -360,6 +356,7 @@ impl<'a, A: Alarm<'a>> HD44780<'a, A> {
     /// - lcd.init(16,2);
     ///
     pub fn init(&self, col: u8, row: u8) {
+        debug!("init in capsula de hd44780");
         self.begin_done.set(false);
         self.width.set(col);
         self.height.set(row);
@@ -823,20 +820,3 @@ impl<'a, A: Alarm<'a>> TextScreen for HD44780<'a, A> {
         }
     }
 }
-
-// pub struct HD44780I2C<'a, A: Alarm<'a>> {
-//     alarm: &'a A,
-//     mcp23008: Option<&'a mcp230xx::MCP230xx<'a>>,
-// }
-
-// impl<'a, A: Alarm<'a>> HD44780I2C<'a, A> {
-//     pub fn new(
-//         alarm: &'a A,
-//         mcp230xxx: Option<&'a mcp230xx::MCP230xx<'a>>
-//     ) -> HD44780I2C {
-//         HD44780I2C {
-//             alarm: alarm,
-//             mcp23008: mcp230xx,
-//         }
-//     }
-// }

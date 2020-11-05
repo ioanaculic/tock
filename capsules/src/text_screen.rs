@@ -14,6 +14,7 @@
 use core::cell::Cell;
 use core::convert::From;
 use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::debug;
 use kernel::hil;
 use kernel::ReturnCode;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, Shared};
@@ -210,6 +211,7 @@ impl<'a> Driver for TextScreen<'a> {
         callback: Option<Callback>,
         app_id: AppId,
     ) -> ReturnCode {
+        debug!("subscribe in text_screen");
         match subscribe_num {
             0 => self
                 .apps
@@ -223,6 +225,7 @@ impl<'a> Driver for TextScreen<'a> {
     }
 
     fn command(&self, command_num: usize, data1: usize, data2: usize, appid: AppId) -> ReturnCode {
+        debug!("command in text_screen");
         match command_num {
             // This driver exists.
             0 => ReturnCode::SUCCESS,
@@ -259,6 +262,7 @@ impl<'a> Driver for TextScreen<'a> {
         allow_num: usize,
         slice: Option<AppSlice<Shared, u8>>,
     ) -> ReturnCode {
+        debug!("allow in text_screen");
         match allow_num {
             0 => self
                 .apps

@@ -60,8 +60,8 @@ macro_rules! hd44780_i2c_component_helper {
         static mut BUF1: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
         static mut BUF2: MaybeUninit<HD44780<'static, VirtualMuxAlarm<'static, $A>>> =
             MaybeUninit::uninit();
-        static i2c_buffer: MaybeUninit<HD44780I2C<'static>> = MaybeUninit::uninit();
-        let i2c = static_init_half!(&i2c_buffer, HD44780I2C<'static>, HD44780I2C::new($M, &mut capsules::hd44780::MCP_PINS));
+        static mut i2c_buffer: MaybeUninit<HD44780I2C<'static>> = MaybeUninit::uninit();
+        let i2c = static_init_half!(&mut i2c_buffer, HD44780I2C<'static>, HD44780I2C::new($M, &mut capsules::hd44780::MCP_PINS));
         (
             &mut BUF1,
             &mut BUF2,
@@ -113,30 +113,3 @@ impl<G: 'static + HD44780Gpio, A: 'static + time::Alarm<'static>> Component for 
         hd44780
     }
 }
-
-// pub struct HD44780ComponentI2C<A: 'static + time::Alarm<'static>> {
-//     alarm_mux: &'static MuxAlarm<'static, A>,
-//     mcp_230xx: &'static MCP230xx<'static>,
-// }
-
-// impl<A: 'static + time::Alarm<'static>> HD44780ComponentI2C<A: 'static + time::Alarm<'static>> {
-//     pub fn new(
-//         alarm_mux: &'static MuxAlarm<'static, A>,
-//         mcp_230xx: &'static MCP230xx<'static>,
-//     ) -> HD44780ComponentI2C {
-//         HD44780ComponentI2C {
-//             alarm_mux: alarm_mux,
-//             mcp_230xx: mcp_230xx,
-//         }
-//     }
-// }
-
-// impl<A: 'static + time::Alarm<'static>> Component for HD44780ComponentI2C<A: 'static + time::Alarm<'static>> {
-//     type StaticInput = (
-//         &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
-//         &'static mut MaybeUninit<HD44780<'static, VirtualMuxAlarm<'static, A>>>,
-//     );
-//     type Output = ();
-    
-//     unsafe fn finalize
-// }
