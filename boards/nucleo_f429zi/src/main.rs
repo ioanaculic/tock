@@ -152,6 +152,20 @@ unsafe fn set_pin_primary_functions() {
     PORT[PortId::F as usize].enable_clock();
     PORT[PortId::G as usize].enable_clock();
     PORT[PortId::H as usize].enable_clock();
+
+    PinId::PB08.get_pin().as_ref().map(|pin| {
+        pin.set_mode_output_opendrain();
+        pin.set_mode(Mode::AlternateFunctionMode);
+        pin.set_floating_state(kernel::hil::gpio::FloatingState::PullNone);
+        pin.set_alternate_function(AlternateFunction::AF4);
+    });
+
+    PinId::PB09.get_pin().as_ref().map(|pin| {
+        pin.set_mode_output_opendrain();
+        pin.set_mode(Mode::AlternateFunctionMode);
+        pin.set_floating_state(kernel::hil::gpio::FloatingState::PullNone);
+        pin.set_alternate_function(AlternateFunction::AF4);
+    });
 }
 
 /// Helper function for miscellaneous peripheral functions
@@ -300,7 +314,7 @@ pub unsafe fn reset_handler() {
         components::mcp230xx_component_helper!(),
     );
 
-    let lcd_i2c = components::hd44780::HD44780Component::new(mux_alarm).finalize(
+    let lcd = components::hd44780::HD44780Component::new(mux_alarm).finalize(
         components::hd44780_i2c_component_helper!(
             stm32f429zi::tim2::Tim2,
             mcp230xx
@@ -325,10 +339,10 @@ pub unsafe fn reset_handler() {
     //     ),
     // );
 
-    let text_screen = components::text_screen::TextScreenComponent::new(board_kernel, lcd_i2c)
+    let text_screen = components::text_screen::TextScreenComponent::new(board_kernel, lcd)
         .finalize(components::screen_buffer_size!(64));
 
-    lcd_i2c.init(16, 2);
+    lcd.init(16, 2);
 
     // GPIO
     let gpio = GpioComponent::new(
