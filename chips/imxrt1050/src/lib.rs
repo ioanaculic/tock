@@ -18,6 +18,7 @@ pub mod iomuxc;
 pub mod iomuxc_snvs;
 pub mod lpi2c;
 pub mod lpuart;
+pub mod dcdc;
 
 use cortexm7::{generic_isr, hard_fault_handler, svc_handler, systick_handler};
 // use cortexm::scb::{set_vector_table_offset};

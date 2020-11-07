@@ -173,6 +173,14 @@ unsafe fn setup_peripherals() {
     cortexm7::nvic::Nvic::new(imxrt1050::nvic::GPT1).enable();
 }
 
+/// Helper function for initialising main clocks 
+unsafe fn init_clocks() {
+    // Configuring the VDD_SOC to 1.275V. It is necessary to set AHB to 600Mhz
+    imxrt1050::dcdc::DCDC.modify_vdd_soc(1275);
+
+
+}
+
 /// Reset Handler.
 ///
 /// This symbol is loaded into vector table by the IMXRT1050 chip crate.
@@ -182,6 +190,9 @@ unsafe fn setup_peripherals() {
 #[no_mangle]
 pub unsafe fn reset_handler() {
     imxrt1050::init();
+
+    init_clocks();
+
     imxrt1050::lpuart::LPUART1.set_baud();
 
     set_pin_primary_functions();

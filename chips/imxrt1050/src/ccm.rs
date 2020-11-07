@@ -12,8 +12,14 @@ struct CcmRegisters {
     csr: ReadOnly<u32, CSR::Register>,
     // CCM Clock Switcher Register
     ccsr: ReadWrite<u32, CCSR::Register>,
+    // CCM Arm Clock Root Register
+    cacrr: ReadWrite<u32, CACRR::Register>,
+    // CCM Bus Clock Divider Register
+    cbcdr: ReadWrite<u32, CBCDR::Register>,
+    // CCM Bus Clock Multiplexer Register
+    cbcmr: ReadWrite<u32, CBCMR::Register>,
     // unimplemented
-    _reserved2: [u8; 20],
+    _reserved2: [u8; 12],
     cscdr1: ReadWrite<u32, CSCDR1::Register>,
     _reserved3: [u8; 44],
     clpcr: ReadWrite<u32, CLPCR::Register>,
@@ -56,6 +62,44 @@ register_bitfields![u32,
 
     CCSR [
         PLL3_SW_CLK_SEL OFFSET(0) NUMBITS(1) []
+    ],
+
+    CACRR [
+        ARM_PODF OFFSET(0) NUMBITS(2) []
+    ],
+
+    CBCDR [
+        // Divider for periph_clk2_podf
+        PERIPH_CLK2_PODF OFFSET(27) NUMBITS(3) [],
+        // Selector for peripheral main clock
+        PERIPH_CLK_SEL OFFSET(25) NUMBITS(1) [],
+        // Post divider for SEMC clock
+        SEMC_PODF OFFSET(16) NUMBITS(3) [],
+        // Divider for AHB PODF
+        AHB_PODF OFFSET(10) NUMBITS(3) [],
+        // Divider for ipg podf
+        IPG_PODF OFFSET(8) NUMBITS(2) [],
+        // SEMC alternative clock select
+        SEMC_ALT_CLK_SEL OFFSET(7) NUMBITS(1) [],
+        // SEMC clock source select
+        SEMC_CLK_SEL OFFSET(6) NUMBITS(1) []
+    ],
+
+    CBCMR [
+        // Divider for LPSPI
+        LPSPI_PODF OFFSET(27) NUMBITS(3) [],
+        // Selector for peripheral main clock
+        PERIPH_CLK_SEL OFFSET(25) NUMBITS(1) [],
+        // Post divider for SEMC clock
+        SEMC_PODF OFFSET(16) NUMBITS(3) [],
+        // Divider for AHB PODF
+        AHB_PODF OFFSET(10) NUMBITS(3) [],
+        // Divider for ipg podf
+        IPG_PODF OFFSET(8) NUMBITS(2) [],
+        // SEMC alternative clock select
+        SEMC_ALT_CLK_SEL OFFSET(7) NUMBITS(1) [],
+        // SEMC clock source select
+        SEMC_CLK_SEL OFFSET(6) NUMBITS(1) []
     ],
 
     CSCDR1 [
@@ -305,6 +349,10 @@ impl Ccm {
 
     pub fn set_low_power_mode(&self) {
         self.registers.clpcr.modify(CLPCR::LPM.val(0b00 as u32));
+    }
+
+    pub fn set_peripheral_clk2_clock(&self, val: u32) {
+        self.registers.cbcmr.modify(CBCMR::PERIPH_CLK2_SEL.val(val as u32));
     }
 
     // Iomuxc_snvs clock
