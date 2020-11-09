@@ -11,6 +11,7 @@ use kernel::ReturnCode;
 
 use crate::nvic;
 use crate::rcc;
+use kernel::debug;
 
 /// General purpose timers
 #[repr(C)]
@@ -339,8 +340,9 @@ impl<'a> Tim2<'a> {
     }
 
     pub fn handle_interrupt(&self) {
-        self.registers.sr.modify(SR::CC1IF::CLEAR);
-
+        debug!("alarm interrupt\r\n");
+        self.registers.sr.modify(SR::UIF::CLEAR);
+        self.disarm();
         self.client.map(|client| client.alarm());
     }
 
@@ -379,7 +381,7 @@ impl<'a> Counter<'a> for Tim2<'a> {
 
     fn stop(&self) -> ReturnCode {
         self.registers.cr1.modify(CR1::CEN::CLEAR);
-        self.registers.sr.modify(SR::CC1IF::CLEAR);
+        self.registers.sr.modify(SR::UIF::CLEAR);
         ReturnCode::SUCCESS
     }
 
@@ -410,19 +412,19 @@ impl<'a> Alarm<'a> for Tim2<'a> {
         }
 
         self.disarm();
-        self.registers.ccr1.set(expire.into_u32());
-        self.registers.dier.modify(DIER::CC1IE::SET);
+        self.registers.arr.set(expire.into_u32());
+        self.registers.dier.modify(DIER::UIE::SET);
     }
 
     fn get_alarm(&self) -> Self::Ticks {
-        Self::Ticks::from(self.registers.ccr1.get())
+        Self::Ticks::from(self.registers.arr.get())
     }
 
     fn disarm(&self) -> ReturnCode {
         unsafe {
             atomic(|| {
                 // Disable counter
-                self.registers.dier.modify(DIER::CC1IE::CLEAR);
+                self.registers.dier.modify(DIER::UIE::CLEAR);
                 cortexm4::nvic::Nvic::new(self.irqn).clear_pending();
             });
         }
@@ -431,7 +433,7 @@ impl<'a> Alarm<'a> for Tim2<'a> {
 
     fn is_armed(&self) -> bool {
         // If counter is enabled, then CC1IE is set
-        self.registers.dier.is_set(DIER::CC1IE)
+        self.registers.dier.is_set(DIER::UIE)
     }
 
     fn minimum_dt(&self) -> Self::Ticks {

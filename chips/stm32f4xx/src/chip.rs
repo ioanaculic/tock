@@ -19,7 +19,7 @@ use crate::usart;
 use crate::deferred_calls::DeferredCallTask;
 
 pub struct Stm32f4xx {
-    mpu: cortexm4::mpu::MPU,
+    mpu: (),
     userspace_kernel_boundary: cortexm4::syscall::SysCall,
     scheduler_timer: cortexm4::systick::SysTick,
 }
@@ -27,15 +27,15 @@ pub struct Stm32f4xx {
 impl Stm32f4xx {
     pub unsafe fn new() -> Stm32f4xx {
         Stm32f4xx {
-            mpu: cortexm4::mpu::MPU::new(),
+            mpu: (),
             userspace_kernel_boundary: cortexm4::syscall::SysCall::new(),
-            scheduler_timer: cortexm4::systick::SysTick::new(),
+            scheduler_timer: cortexm4::systick::SysTick::new_with_calibration(16_000_000u32),
         }
     }
 }
 
 impl Chip for Stm32f4xx {
-    type MPU = cortexm4::mpu::MPU;
+    type MPU = ();
     type UserspaceKernelBoundary = cortexm4::syscall::SysCall;
     type SchedulerTimer = cortexm4::systick::SysTick;
     type WatchDog = ();
@@ -46,6 +46,7 @@ impl Chip for Stm32f4xx {
                 if let Some(task) = deferred_call::DeferredCall::next_pending() {
                     match task {
                         DeferredCallTask::Fsmc => fsmc::FSMC.handle_interrupt(),
+                        DeferredCallTask::Semihost => usart::USART2.handle_interrupt(),
                     }
                 } else if let Some(interrupt) = cortexm4::nvic::next_pending() {
                     match interrupt {
@@ -107,8 +108,8 @@ impl Chip for Stm32f4xx {
         unsafe { cortexm4::nvic::has_pending() || deferred_call::has_tasks() }
     }
 
-    fn mpu(&self) -> &cortexm4::mpu::MPU {
-        &self.mpu
+    fn mpu(&self) -> &() {
+        &()
     }
 
     fn scheduler_timer(&self) -> &cortexm4::systick::SysTick {

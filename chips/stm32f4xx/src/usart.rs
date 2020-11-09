@@ -1,10 +1,13 @@
 use core::cell::Cell;
-use kernel::common::cells::OptionalCell;
+use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ClockInterface;
 use kernel::ReturnCode;
+
+use crate::deferred_calls::DeferredCallTask;
+use kernel::common::deferred_call::DeferredCall;
 
 use crate::dma1;
 use crate::dma1::Dma1Peripheral;
@@ -144,6 +147,9 @@ register_bitfields![u32,
     ]
 ];
 
+static DEFERRED_CALL: DeferredCall<DeferredCallTask> =
+    unsafe { DeferredCall::new(DeferredCallTask::Semihost) };
+
 const USART2_BASE: StaticRef<UsartRegisters> =
     unsafe { StaticRef::new(0x40004400 as *const UsartRegisters) };
 const USART3_BASE: StaticRef<UsartRegisters> =
@@ -181,6 +187,8 @@ pub struct Usart<'a> {
 
     usart_tx_state: Cell<USARTStateTX>,
     usart_rx_state: Cell<USARTStateRX>,
+
+    tx_buffer: TakeCell<'static, [u8]>,
 }
 
 // for use by `set_dma`
@@ -225,6 +233,8 @@ impl<'a> Usart<'a> {
 
             usart_tx_state: Cell::new(USARTStateTX::Idle),
             usart_rx_state: Cell::new(USARTStateRX::Idle),
+
+            tx_buffer: TakeCell::empty(),
         }
     }
 
@@ -248,27 +258,26 @@ impl<'a> Usart<'a> {
     // According to section 25.4.13, we need to make sure that USART TC flag is
     // set before disabling the DMA TX on the peripheral side.
     pub fn handle_interrupt(&self) {
-        self.clear_transmit_complete();
-        self.disable_transmit_complete_interrupt();
+        // self.clear_transmit_complete();
+        // self.disable_transmit_complete_interrupt();
 
-        // Ignore if USARTStateTX is in some other state other than
-        // Transfer_Completing.
-        if self.usart_tx_state.get() == USARTStateTX::Transfer_Completing {
-            self.disable_tx();
-            self.usart_tx_state.set(USARTStateTX::Idle);
+        // // Ignore if USARTStateTX is in some other state other than
+        // // Transfer_Completing.
+        // if self.usart_tx_state.get() == USARTStateTX::Transfer_Completing {
+        //     self.disable_tx();
+        //     self.usart_tx_state.set(USARTStateTX::Idle);
 
-            // get buffer
-            let buffer = self.tx_dma.map_or(None, |tx_dma| tx_dma.return_buffer());
-            let len = self.tx_len.get();
-            self.tx_len.set(0);
-
-            // alert client
-            self.tx_client.map(|client| {
-                buffer.map(|buf| {
-                    client.transmitted_buffer(buf, len, ReturnCode::SUCCESS);
-                });
+        //     // get buffer
+        //     let buffer = self.tx_dma.map_or(None, |tx_dma| tx_dma.return_buffer());
+        //     let len = self.tx_len.get();
+        //     self.tx_len.set(0);
+        //     // alert client
+        self.tx_client.map(|client| {
+            self.tx_buffer.take().map(|buf| {
+                client.transmitted_buffer(buf, self.tx_len.get(), ReturnCode::SUCCESS);
             });
-        }
+        });
+        // }
     }
 
     // for use by dma1
@@ -377,21 +386,30 @@ impl<'a> hil::uart::Transmit<'a> for Usart<'a> {
         // if the state machine is working correctly, transmit should never
         // abort.
 
-        if self.usart_tx_state.get() != USARTStateTX::Idle {
-            // there is an ongoing transmission, quit it
-            return (ReturnCode::EBUSY, Some(tx_data));
+        for i in 0..tx_len {
+            // hprint!("{}", tx_data[i] as char).unwrap();
+            self.send_byte(tx_data[i]);
         }
 
-        // setup and enable dma stream
-        self.tx_dma.map(move |dma| {
-            self.tx_len.set(tx_len);
-            dma.do_transfer(tx_data, tx_len);
-        });
+        DEFERRED_CALL.set();
 
-        self.usart_tx_state.set(USARTStateTX::DMA_Transmitting);
+        // if self.usart_tx_state.get() != USARTStateTX::Idle {
+        //     // there is an ongoing transmission, quit it
+        //     return (ReturnCode::EBUSY, Some(tx_data));
+        // }
 
-        // enable dma tx on peripheral side
-        self.enable_tx();
+        self.tx_len.set(tx_len);
+        self.tx_buffer.replace(tx_data);
+        // // setup and enable dma stream
+        // self.tx_dma.map(move |dma| {
+        //     self.tx_len.set(tx_len);
+        //     dma.do_transfer(tx_data, tx_len);
+        // });
+
+        // self.usart_tx_state.set(USARTStateTX::DMA_Transmitting);
+
+        // // enable dma tx on peripheral side
+        // self.enable_tx();
         (ReturnCode::SUCCESS, None)
     }
 

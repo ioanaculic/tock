@@ -88,7 +88,8 @@ const NVIC: StaticRef<NvicRegisters> =
 /// of available interrupts (as this is the number of banks of 32), but the
 /// actual number may be less. See NVIC and ICTR documentation for more detail.
 fn number_of_nvic_registers() -> usize {
-    (NVIC.ictr.read(InterruptControllerType::INTLINESNUM) + 1) as usize
+    // (NVIC.ictr.read(InterruptControllerType::INTLINESNUM) + 1) as usize
+    3
 }
 
 /// Clear all pending interrupts
