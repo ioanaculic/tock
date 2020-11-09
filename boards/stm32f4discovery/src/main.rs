@@ -561,7 +561,6 @@ pub unsafe fn reset_handler() {
         /// This symbol is defined in the linker script.
         static _eappmem: u8;
     }
-    debug!("Loading processes");
 
     kernel::procs::load_processes(
         board_kernel,
@@ -582,8 +581,6 @@ pub unsafe fn reset_handler() {
         debug!("Error loading processes!");
         debug!("{:?}", err);
     });
-
-    debug!("Loaded processes");
 
     let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
         .finalize(components::rr_component_helper!(NUM_PROCS));
