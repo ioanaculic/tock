@@ -340,7 +340,7 @@ impl<'a> Tim2<'a> {
     }
 
     pub fn handle_interrupt(&self) {
-        debug!("alarm interrupt\r\n");
+        // debug!("alarm interrupt\r\n");
         self.registers.sr.modify(SR::UIF::CLEAR);
         self.disarm();
         self.client.map(|client| client.alarm());
