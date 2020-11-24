@@ -19,7 +19,7 @@ use crate::usart;
 use crate::deferred_calls::DeferredCallTask;
 
 pub struct Stm32f4xx {
-    mpu: (),
+    // mpu: (),
     userspace_kernel_boundary: cortexm4::syscall::SysCall,
     scheduler_timer: cortexm4::systick::SysTick,
 }
@@ -27,7 +27,7 @@ pub struct Stm32f4xx {
 impl Stm32f4xx {
     pub unsafe fn new() -> Stm32f4xx {
         Stm32f4xx {
-            mpu: (),
+            // mpu: (),
             userspace_kernel_boundary: cortexm4::syscall::SysCall::new(),
             scheduler_timer: cortexm4::systick::SysTick::new_with_calibration(16_000_000u32),
         }

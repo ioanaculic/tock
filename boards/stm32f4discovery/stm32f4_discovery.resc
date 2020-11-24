@@ -1,0 +1,50 @@
+:name: STM32F4 Discovery
+:description: This script runs Contiki on STM32F4 Discovery.
+
+using sysbus
+$name?="STM32F4_Discovery"
+mach create $name
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl
+
+cpu PerformanceInMips 125
+
+$bin?=@/home/tock/tock-saiot/tock/target/thumbv7em-none-eabi/release/stm32f4discovery.elf
+
+showAnalyzer sysbus.uart2
+
+logLevel 3
+
+logLevel 1 sysbus.uart2
+logLevel 1 sysbus.cpu
+logLevel 1 sysbus.nvic
+
+logLevel -1 sysbus.gpioPortD.UserLED0
+logLevel -1 sysbus.gpioPortD.UserLED1
+logLevel -1 sysbus.gpioPortD.UserLED2
+logLevel -1 sysbus.gpioPortD.UserLED3
+logLevel -1 sysbus.gpioPortA.SelectButton
+logLevel -1 sysbus.gpioPortG.DownButton
+logLevel -1 sysbus.gpioPortF.LeftButton
+logLevel -1 sysbus.gpioPortF.RightButton
+logLevel -1 sysbus.gpioPortG.UpButton
+
+
+### Set random board UNIQUE ID ###
+
+python "import _random"
+python "rand = _random.Random()"
+
+$id1 = `python "print rand.getrandbits(32)"`
+$id2 = `python "print rand.getrandbits(32)"`
+$id3 = `python "print rand.getrandbits(32)"`
+macro reset
+"""
+    sysbus LoadELF $bin
+
+    sysbus WriteDoubleWord 0x1FFF7A10 $id1
+    sysbus WriteDoubleWord 0x1FFF7A14 $id2
+    sysbus WriteDoubleWord 0x1FFF7A18 $id3
+"""
+
+runMacro $reset
+

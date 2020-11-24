@@ -6,7 +6,6 @@ build = "build.rs"
 edition = "2018"
 
 [dependencies]
-cortex-m-semihosting = "*"
 components = { path = "../components" }
 cortexm4 = { path = "../../arch/cortex-m4" }
 capsules = { path = "../../capsules" }

@@ -11,7 +11,6 @@ use kernel::ReturnCode;
 
 use crate::nvic;
 use crate::rcc;
-use kernel::debug;
 
 /// General purpose timers
 #[repr(C)]
@@ -340,7 +339,6 @@ impl<'a> Tim2<'a> {
     }
 
     pub fn handle_interrupt(&self) {
-        // debug!("alarm interrupt\r\n");
         self.registers.sr.modify(SR::UIF::CLEAR);
         self.disarm();
         self.client.map(|client| client.alarm());

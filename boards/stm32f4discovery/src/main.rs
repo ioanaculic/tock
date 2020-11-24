@@ -47,7 +47,7 @@ struct STM32F412GDiscovery {
     console: &'static capsules::console::Console<'static>,
     ipc: kernel::ipc::IPC,
     led: &'static capsules::led::LED<'static, stm32f407zg::gpio::Pin<'static>>,
-    // button: &'static capsules::button::Button<'static, stm32f407zg::gpio::Pin<'static>>,
+    button: &'static capsules::button::Button<'static, stm32f407zg::gpio::Pin<'static>>,
     alarm: &'static capsules::alarm::AlarmDriver<
         'static,
         VirtualMuxAlarm<'static, stm32f407zg::tim2::Tim2<'static>>,
@@ -64,7 +64,7 @@ impl Platform for STM32F412GDiscovery {
         match driver_num {
             capsules::console::DRIVER_NUM => f(Some(self.console)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
-            // capsules::button::DRIVER_NUM => f(Some(self.button)),
+            capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
@@ -441,43 +441,43 @@ pub unsafe fn reset_handler() {
     .finalize(components::led_component_buf!(stm32f407zg::gpio::Pin));
 
     // // BUTTONs
-    // let button = components::button::ButtonComponent::new(
-    //     board_kernel,
-    //     components::button_component_helper!(
-    //         stm32f407zg::gpio::Pin,
-    //         // Select
-    //         (
-    //             stm32f407zg::gpio::PinId::PA00.get_pin().as_ref().unwrap(),
-    //             kernel::hil::gpio::ActivationMode::ActiveHigh,
-    //             kernel::hil::gpio::FloatingState::PullNone
-    //         ),
-    //         // Down
-    //         (
-    //             stm32f407zg::gpio::PinId::PG01.get_pin().as_ref().unwrap(),
-    //             kernel::hil::gpio::ActivationMode::ActiveHigh,
-    //             kernel::hil::gpio::FloatingState::PullNone
-    //         ),
-    //         // Left
-    //         (
-    //             stm32f407zg::gpio::PinId::PF15.get_pin().as_ref().unwrap(),
-    //             kernel::hil::gpio::ActivationMode::ActiveHigh,
-    //             kernel::hil::gpio::FloatingState::PullNone
-    //         ),
-    //         // Right
-    //         (
-    //             stm32f407zg::gpio::PinId::PF14.get_pin().as_ref().unwrap(),
-    //             kernel::hil::gpio::ActivationMode::ActiveHigh,
-    //             kernel::hil::gpio::FloatingState::PullNone
-    //         ),
-    //         // Up
-    //         (
-    //             stm32f407zg::gpio::PinId::PG00.get_pin().as_ref().unwrap(),
-    //             kernel::hil::gpio::ActivationMode::ActiveHigh,
-    //             kernel::hil::gpio::FloatingState::PullNone
-    //         )
-    //     ),
-    // )
-    // .finalize(components::button_component_buf!(stm32f407zg::gpio::Pin));
+    let button = components::button::ButtonComponent::new(
+        board_kernel,
+        components::button_component_helper!(
+            stm32f407zg::gpio::Pin,
+            // Select
+            (
+                stm32f407zg::gpio::PinId::PA00.get_pin().as_ref().unwrap(),
+                kernel::hil::gpio::ActivationMode::ActiveHigh,
+                kernel::hil::gpio::FloatingState::PullNone
+            ),
+            // Down
+            (
+                stm32f407zg::gpio::PinId::PG01.get_pin().as_ref().unwrap(),
+                kernel::hil::gpio::ActivationMode::ActiveHigh,
+                kernel::hil::gpio::FloatingState::PullNone
+            ),
+            // Left
+            (
+                stm32f407zg::gpio::PinId::PF15.get_pin().as_ref().unwrap(),
+                kernel::hil::gpio::ActivationMode::ActiveHigh,
+                kernel::hil::gpio::FloatingState::PullNone
+            ),
+            // Right
+            (
+                stm32f407zg::gpio::PinId::PF14.get_pin().as_ref().unwrap(),
+                kernel::hil::gpio::ActivationMode::ActiveHigh,
+                kernel::hil::gpio::FloatingState::PullNone
+            ),
+            // Up
+            (
+                stm32f407zg::gpio::PinId::PG00.get_pin().as_ref().unwrap(),
+                kernel::hil::gpio::ActivationMode::ActiveHigh,
+                kernel::hil::gpio::FloatingState::PullNone
+            )
+        ),
+    )
+    .finalize(components::button_component_buf!(stm32f407zg::gpio::Pin));
 
     // ALARM
 
@@ -527,6 +527,7 @@ pub unsafe fn reset_handler() {
         console: console,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
         led: led,
+        button: button,
         alarm: alarm,
         gpio: gpio,
     };

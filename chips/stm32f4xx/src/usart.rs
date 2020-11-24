@@ -166,7 +166,7 @@ enum USARTStateRX {
 #[derive(Copy, Clone, PartialEq)]
 enum USARTStateTX {
     Idle,
-    DMA_Transmitting,
+    // DMA_Transmitting,
     Transfer_Completing, // DMA finished, but not all bytes sent
 }
 
@@ -294,9 +294,9 @@ impl<'a> Usart<'a> {
     }
 
     // enable DMA TX from the peripheral side
-    fn enable_tx(&self) {
-        self.registers.cr3.modify(CR3::DMAT::SET);
-    }
+    // fn enable_tx(&self) {
+    //     self.registers.cr3.modify(CR3::DMAT::SET);
+    // }
 
     // disable DMA TX from the peripheral side
     fn disable_tx(&self) {
@@ -363,13 +363,13 @@ impl<'a> Usart<'a> {
         self.registers.cr1.modify(CR1::TCIE::SET);
     }
 
-    fn disable_transmit_complete_interrupt(&self) {
-        self.registers.cr1.modify(CR1::TCIE::CLEAR);
-    }
+    // fn disable_transmit_complete_interrupt(&self) {
+    //     self.registers.cr1.modify(CR1::TCIE::CLEAR);
+    // }
 
-    fn clear_transmit_complete(&self) {
-        self.registers.sr.modify(SR::TC::CLEAR);
-    }
+    // fn clear_transmit_complete(&self) {
+    //     self.registers.sr.modify(SR::TC::CLEAR);
+    // }
 }
 
 impl<'a> hil::uart::Transmit<'a> for Usart<'a> {
