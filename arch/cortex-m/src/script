@@ -1,0 +1,43 @@
+1. mkdir tock_d 
+2. cd tock_d
+3. git clone https://github.com/UPBIoT/tock.git
+4. git clone https://github.com/DLang-IoT/libtock-d.git
+5. cd libtock-d/
+6. git checkout renode_work
+7. cd runtime/cortex-m
+8. make
+
+// exemplu simplu, cu -betterC: examples/betterC_example
+9. cd ../../examples/betterC_example/
+10. make
+
+// exemplu fara betterC, cu core.stdc.stdio: examples/basic_example
+9. cd ../../examples/basic_example/
+10. make
+
+// exemplu cu druntime linkat, crapa - examples/linked_druntime_example
+9. cd ../../examples/linked_druntime_example
+10. make
+
+11. cd ../../../tock
+12. git checkout saiot
+13. cd stm32f4discovery
+14. vim Makefile, add:
+
+APP=../../../libtock-d/examples/nume_exemplu_de_mai_sus/build/cortex-m4/cortex-m4.tbf
+KERNEL=$(TOCK_ROOT_DIRECTORY)/target/$(TARGET)/debug/$(PLATFORM).elf
+KERNEL_WITH_APP=$(TOCK_ROOT_DIRECTORY)/target/$(TARGET)/debug/$(PLATFORM)-app.elf
+
+and modify 
+.PHONY: program
+program: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/debug/$(PLATFORM).elf
+        $(error See README.md and update this section accordingly)
+
+with 
+.PHONY: program
+program: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/debug/$(PLATFORM).elf
+        arm-none-eabi-objcopy --update-section .apps=$(APP) $(KERNEL) $(KERNEL_WITH_APP)
+
+15. make program
+16. cd && 
+

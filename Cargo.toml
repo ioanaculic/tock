@@ -21,6 +21,7 @@ members = [
     "boards/stm32f3discovery",
     "boards/stm32f412gdiscovery",
     "boards/stm32f4discovery",
+    "boards/stm32f4discovery_renode",
     "boards/nano33ble",
     "capsules",
     "chips/apollo3",
