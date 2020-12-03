@@ -1,4 +1,4 @@
-//! Board file for STM32F412GDiscovery Discovery kit development board
+//! Board file for STM32F4Discovery Discovery kit development board
 //!
 //! - <https://www.st.com/en/evaluation-tools/32f412gdiscovery.html>
 
@@ -43,7 +43,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 /// A structure representing this platform that holds references to all
 /// capsules for this platform.
-struct STM32F412GDiscovery {
+struct STM32F4Discovery {
     console: &'static capsules::console::Console<'static>,
     ipc: kernel::ipc::IPC,
     led: &'static capsules::led::LED<'static, stm32f407zg::gpio::Pin<'static>>,
@@ -56,7 +56,7 @@ struct STM32F412GDiscovery {
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
-impl Platform for STM32F412GDiscovery {
+impl Platform for STM32F4Discovery {
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&dyn kernel::Driver>) -> R,
@@ -523,7 +523,7 @@ pub unsafe fn reset_handler() {
     )
     .finalize(components::gpio_component_buf!(stm32f407zg::gpio::Pin));
 
-    let stm32f407zg = STM32F412GDiscovery {
+    let stm32f407zg = STM32F4Discovery {
         console: console,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
         led: led,
