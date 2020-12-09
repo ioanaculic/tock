@@ -112,3 +112,18 @@ pub trait NineDofClient {
     /// over the syscall interface to an application.
     fn callback(&self, arg1: usize, arg2: usize, arg3: usize);
 }
+
+/// A basic interface for a pressure sensor
+pub trait PressureDriver<'a> {
+    fn set_client(&self, client: &'a dyn PressureClient);
+    fn read_pressure(&self) -> ReturnCode;
+}
+
+/// Client for receiving pressure readings.
+pub trait PressureClient {
+    /// Called when a pressure reading has completed.
+    ///
+    /// - `value`: the most recently read pressure in pascals
+    /// centigrate.
+    fn callback(&self, value: usize);
+}
