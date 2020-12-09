@@ -193,8 +193,11 @@ impl<'a> BMP280<'a> {
         self.buffer.take().map(|buffer| {
             self.i2c.enable();
 
-            buffer[0] = Registers::SOFTRESET as u8;
-            buffer[1] = SensorMode::SOFTRESET as u8;
+            let [high, low] = u16::to_be_bytes(Registers::SOFTRESET as u16);
+
+            buffer[0] = high;
+            buffer[1] = low;
+            
             self.i2c.write_read(buffer, 2, 2);
             self.state.set(State::Reset);
         });

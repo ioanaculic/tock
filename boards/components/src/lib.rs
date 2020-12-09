@@ -29,6 +29,7 @@ pub mod ninedof;
 pub mod nonvolatile_storage;
 pub mod nrf51822;
 pub mod panic_button;
+pub mod pressure;
 pub mod process_console;
 pub mod rng;
 pub mod sched;
