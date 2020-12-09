@@ -197,7 +197,7 @@ impl<'a> BMP280<'a> {
 
             buffer[0] = high;
             buffer[1] = low;
-            
+
             self.i2c.write_read(buffer, 2, 2);
             self.state.set(State::Reset);
         });

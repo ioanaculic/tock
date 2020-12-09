@@ -39,7 +39,10 @@ impl<P: 'static + hil::sensors::PressureDriver<'static>> Component for PressureC
 
         let press = static_init!(
             PressureSensor<'static>,
-            PressureSensor::new(self.press_sensor, self.board_kernel.create_grant(&grant_cap))
+            PressureSensor::new(
+                self.press_sensor,
+                self.board_kernel.create_grant(&grant_cap)
+            )
         );
 
         hil::sensors::PressureDriver::set_client(self.press_sensor, press);
