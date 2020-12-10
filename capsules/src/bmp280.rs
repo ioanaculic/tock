@@ -10,6 +10,7 @@ use enum_primitive::enum_from_primitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::i2c;
 use kernel::ReturnCode;
+use kernel::debug;
 
 pub static BASE_ADDR: u8 = 0x77;
 
@@ -113,6 +114,7 @@ enum State {
     Reset,
     ReadTemperature,
     ReadPressure,
+    ReadChipID,
     Idle,
     ReadStatus,
     READDIGT1,
@@ -178,19 +180,34 @@ impl<'a> BMP280<'a> {
         }
     }
 
-    pub fn read_status(&self) {
-        self.buffer.take().map(|buffer| {
+    pub fn get_chip_id(&self) -> ReturnCode {
+        self.buffer.take().map_or(ReturnCode::ENOMEM, |buffer| {
+            self.i2c.enable();
+
+            buffer[0] = Registers::CHIPID as u8;
+            self.i2c.write_read(buffer, 1, 1);
+
+            self.state.set(State::ReadChipID);
+       
+            ReturnCode::SUCCESS
+        })
+    }
+
+    pub fn read_status(&self) -> ReturnCode {
+        self.buffer.take().map_or(ReturnCode::ENOMEM, |buffer| {
             self.i2c.enable();
 
             buffer[0] = Registers::STATUS as u8;
             self.i2c.write_read(buffer, 1, 1);
 
             self.state.set(State::ReadStatus);
-        });
+       
+            ReturnCode::SUCCESS
+        })
     }
 
-    pub fn reset(&self) {
-        self.buffer.take().map(|buffer| {
+    pub fn reset(&self) -> ReturnCode {
+        self.buffer.take().map_or(ReturnCode::ENOMEM, |buffer| {
             self.i2c.enable();
 
             let [high, low] = u16::to_be_bytes(Registers::SOFTRESET as u16);
@@ -200,7 +217,9 @@ impl<'a> BMP280<'a> {
 
             self.i2c.write_read(buffer, 2, 2);
             self.state.set(State::Reset);
-        });
+            
+            ReturnCode::SUCCESS
+        })
     }
 
     pub fn set_sampling(
@@ -306,6 +325,12 @@ impl i2c::I2CClient for BMP280<'_> {
                     State::ReadStatus => {
                         // TODO do soemthing useful with the status
                         self.state.set(State::Idle);
+                        self.buffer.replace(buffer);
+                    }
+                    State::ReadChipID => {
+                        debug!("{:?}", buffer);
+                        self.state.set(State::Idle);
+                        self.buffer.replace(buffer);
                     }
                     State::ReadTemperature => {
                         let mut adc_t = buffer[0] as i32;
@@ -314,6 +339,8 @@ impl i2c::I2CClient for BMP280<'_> {
                         adc_t = adc_t << 8;
                         adc_t = adc_t | buffer[2] as i32;
                         adc_t = adc_t >> 4;
+
+                        debug!("{:?}", adc_t);
 
                         let var1 = (((adc_t >> 3) - ((self.dig_t1.get() as i32) << 1))
                             * (self.dig_t2.get() as i32))
@@ -325,12 +352,15 @@ impl i2c::I2CClient for BMP280<'_> {
                             * (self.dig_t3.get() as i32))
                             >> 14;
 
+                        debug!("{:?} {:?} {:?}", var1, var2, var1+var2);
+
                         self.t_fine.set(var1 + var2);
 
                         self.buffer.replace(buffer);
                         if self.read_temp.get() == true {
                             self.read_temp.set(false);
                             let stemp = (self.t_fine.get() * 5 + 128) >> 8;
+                            debug!("{:?}", stemp);
                             self.temperature_client
                                 .map(|cb| cb.callback(stemp as usize));
                         }

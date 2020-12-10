@@ -119,6 +119,8 @@ pub struct Platform {
         'static,
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
     >,
+    temperature: &'static capsules::temperature::TemperatureSensor<'static>,
+    pressure: &'static capsules::pressure::PressureSensor<'static>,
 }
 
 impl kernel::Platform for Platform {
@@ -138,6 +140,8 @@ impl kernel::Platform for Platform {
             capsules::ble_advertising_driver::DRIVER_NUM => f(Some(self.ble_radio)),
             capsules::ieee802154::DRIVER_NUM => f(Some(self.ieee802154_radio)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
+            capsules::temperature::DRIVER_NUM => f(Some(self.temperature)),
+            capsules::pressure::DRIVER_NUM => f(Some(self.pressure)),
             _ => f(None),
         }
     }
@@ -355,6 +359,25 @@ pub unsafe fn reset_handler() {
 
     kernel::hil::sensors::ProximityDriver::set_client(apds9960, proximity);
 
+    let bmp280 = components::bmp280::BMP280Component::new(sensors_i2c_bus).finalize(
+        components::sht3x_component_helper!(
+            nrf52::rtc::Rtc<'static>,
+            capsules::bmp280::BASE_ADDR << 1
+        ),
+    );
+    bmp280.set_sampling(
+        capsules::bmp280::SensorMode::NORMAL,
+        capsules::bmp280::SensorSampling::SAMPLINGX2,
+        capsules::bmp280::SensorSampling::SAMPLINGX16,
+        capsules::bmp280::SensorFilter::FILTERX16,
+        capsules::bmp280::StandbyDuration::STANDBY500,
+    );
+
+    let temperature =
+        components::temperature::TemperatureComponent::new(board_kernel, bmp280).finalize(());
+
+    let pressure = components::pressure::PressureComponent::new(board_kernel, bmp280).finalize(());
+
     //--------------------------------------------------------------------------
     // TFT
     //--------------------------------------------------------------------------
@@ -461,6 +484,8 @@ pub unsafe fn reset_handler() {
         rng: rng,
         alarm: alarm,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
+        temperature: temperature,
+        pressure: pressure,
     };
 
     let chip = static_init!(
@@ -475,6 +500,8 @@ pub unsafe fn reset_handler() {
     // Configure the USB stack to enable a serial port over CDC-ACM.
     cdc.enable();
     cdc.attach();
+
+    bmp280.get_chip_id();
 
     debug!("Initialization complete. Entering main loop.");
 

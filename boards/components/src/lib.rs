@@ -3,6 +3,7 @@
 pub mod adc;
 pub mod alarm;
 pub mod analog_comparator;
+pub mod bmp280;
 pub mod bus;
 pub mod button;
 pub mod cdc;
