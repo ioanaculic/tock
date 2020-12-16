@@ -96,7 +96,7 @@ impl<'a, P: hil::pwm::Pwm> MuxPwm<'a, P> {
 }
 
 #[derive(Copy, Clone, PartialEq)]
-enum Operation {
+pub(crate) enum Operation {
     Simple {
         frequency_hz: usize,
         duty_cycle: usize,

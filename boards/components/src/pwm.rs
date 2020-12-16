@@ -6,21 +6,43 @@ use kernel::static_init_half;
 
 #[macro_export]
 macro_rules! pwm_mux_component_helper {
-    ($A:ty) => {{
+    ($P:ty) => {{
         use capsules::virtual_pwm::MuxPwm;
         use core::mem::MaybeUninit;
-        static mut BUF: MaybeUninit<MuxPwm<'static, $A>> = MaybeUninit::uninit();
+        static mut BUF: MaybeUninit<MuxPwm<'static, $P>> = MaybeUninit::uninit();
         &mut BUF
     };};
 }
 
 #[macro_export]
-macro_rules! pwm_component_helper {
-    ($A:ty) => {{
+macro_rules! pwm_pin_component_helper {
+    ($P:ty) => {{
         use capsules::virtual_pwm::PwmPinUser;
         use core::mem::MaybeUninit;
-        static mut BUF: MaybeUninit<virtual_pwm::PwmPinUser<'static, $A>> = MaybeUninit::uninit();
+        static mut BUF: MaybeUninit<PwmPinUser<'static, $P>> = MaybeUninit::uninit();
         &mut BUF
+    };};
+}
+
+#[macro_export]
+macro_rules! pwm_syscall_component_helper {
+    ($($P:expr),+ ) => {{
+        use capsules::pwm::PwmVirtualized;
+        use core::mem::MaybeUninit;
+        use kernel::hil;
+        use kernel::count_expressions;
+        use kernel::static_init;
+        const NUM_DRIVERS: usize = count_expressions!($($P),+);
+
+        let drivers = static_init!(
+            [&'static dyn kernel::hil::pwm::PwmPin; NUM_DRIVERS],
+            [
+                $($P,)*
+            ]
+        );
+        static mut BUF: MaybeUninit<PwmVirtualized<'static>> =
+            MaybeUninit::uninit();
+        (&mut BUF, drivers)
     };};
 }
 
