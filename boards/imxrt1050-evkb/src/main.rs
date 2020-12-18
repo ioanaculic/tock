@@ -442,6 +442,8 @@ pub unsafe fn reset_handler() {
         debug!("{:?}", err);
     });
 
+    imxrt1050::magick_changer();
+
     let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
         .finalize(components::rr_component_helper!(NUM_PROCS));
     board_kernel.kernel_loop(

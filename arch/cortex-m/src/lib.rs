@@ -8,6 +8,7 @@
 #![no_std]
 
 use core::fmt::Write;
+use cortex_m_semihosting::hprintln;
 
 pub mod nvic;
 pub mod scb;
@@ -116,6 +117,7 @@ pub unsafe extern "C" fn svc_handler() {
 #[cfg(all(target_arch = "arm", target_os = "none"))]
 #[naked]
 pub unsafe extern "C" fn generic_isr() {
+    hprintln!("Intru aici!!").unwrap();
     llvm_asm!(
         "
     // Set thread mode to privileged to ensure we are executing as the kernel.
