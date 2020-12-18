@@ -1,0 +1,9 @@
+BOARD_NAME = nucleo_f429zi
+
+userspace: libtock-$(LANG)/examples/$(APP_NAME)/Makefile
+	make -C libtock-$(LANG)/examples/$(APP_NAME)/ clean
+	make -C libtock-$(LANG)/examples/$(APP_NAME)/
+
+kernel: tock/boards/$(BOARD_NAME)/Makefile
+	# make -C tock/boards/$(BOARD_NAME)/ clean
+	APP=~/renode_tock/libtock-$(LANG)/examples/$(APP_NAME)/build/cortex-m4/cortex-m4.tbf make -C tock/boards/$(BOARD_NAME)/ program
