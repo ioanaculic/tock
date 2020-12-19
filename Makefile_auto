@@ -1,4 +1,4 @@
-BOARD_NAME = nucleo_f429zi
+BOARD_NAME = stm32f412gdiscovery
 
 userspace: libtock-$(LANG)/examples/$(APP_NAME)/Makefile
 	make -C libtock-$(LANG)/examples/$(APP_NAME)/ clean
