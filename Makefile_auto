@@ -6,4 +6,4 @@ userspace: libtock-$(LANG)/examples/$(APP_NAME)/Makefile
 
 kernel: tock/boards/$(BOARD_NAME)/Makefile
 	# make -C tock/boards/$(BOARD_NAME)/ clean
-	APP=~/renode/libtock-$(LANG)/examples/$(APP_NAME)/build/cortex-m4/cortex-m4.tbf make -C tock/boards/$(BOARD_NAME)/ program
+	APP=~/tock_d/libtock-$(LANG)/examples/$(APP_NAME)/build/cortex-m4/cortex-m4.tbf make -C tock/boards/$(BOARD_NAME)/ program
