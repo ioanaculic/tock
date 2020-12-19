@@ -8,7 +8,7 @@ machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl
 
 cpu PerformanceInMips 125
 
-$bin?=@/home/tock/renode_tock/tock/target/thumbv7em-none-eabi/debug/stm32f412gdiscovery-app.elf
+$bin?=@/root/tock_d/tock/target/thumbv7em-none-eabi/debug/stm32f412gdiscovery-app.elf
 
 showAnalyzer sysbus.uart2
 
