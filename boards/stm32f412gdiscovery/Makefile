@@ -22,4 +22,4 @@ KERNEL_WITH_APP=$(TOCK_ROOT_DIRECTORY)/target/$(TARGET)/debug/$(PLATFORM)-app.el
 .PHONY: program
 program: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/debug/$(PLATFORM).elf
 	arm-none-eabi-objcopy --update-section .apps=$(APP) $(KERNEL) $(KERNEL_WITH_APP)
-	/home/tock/renode/renode -e "s @$(shell pwd)/stm32f4_discovery-apps.resc"
+	~/renode/renode -e "s @$(shell pwd)/stm32f4_discovery-apps.resc"
