@@ -67,6 +67,7 @@ pub mod spi_peripheral;
 pub mod st77xx;
 pub mod temperature;
 pub mod temperature_stm;
+pub mod timer;
 pub mod touch;
 pub mod tsl2561;
 pub mod usb;
