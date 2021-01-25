@@ -1,7 +1,7 @@
 use kernel::common::registers::{register_bitfields, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil::time::{
-    Counter, Freq16KHz, OverflowClient, Ticks32, Time,
+    Counter, Freq16KHz, OverflowClient, Ticks16, Time,
 };
 use kernel::ClockInterface;
 use kernel::ReturnCode;
@@ -352,17 +352,17 @@ impl<'a> Tim5<'a> {
         // Prescale 16Mhz to 16Khz, by dividing it by 1000. We need set EGR.UG
         // in order for the prescale value to become active.
         self.registers.psc.set((999 - 1) as u32);
-        // self.registers.egr.write(EGR::UG::SET);
+        self.registers.egr.write(EGR::UG::SET);
         self.registers.cr1.modify(CR1::CEN::SET);
     }
 }
 
 impl Time for Tim5<'_> {
     type Frequency = Freq16KHz;
-    type Ticks = Ticks32;
+    type Ticks = Ticks16;
 
-    fn now(&self) -> Ticks32 {
-        Ticks32::from(self.registers.cnt.get())
+    fn now(&self) -> Ticks16 {
+        Ticks16::from(self.registers.cnt.get())
     }
 }
 

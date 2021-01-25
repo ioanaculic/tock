@@ -48,6 +48,7 @@ pub unsafe extern "C" fn systick_handler() {
 
     movw LR, #0xFFF9
     movt LR, #0xFFFF
+    bx LR 
 
     // This will resume in the switch to user function where application state
     // is saved and the scheduler can choose what to do next.
